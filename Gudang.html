@@ -1,0 +1,1355 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Gudang Modern | NS WAREHOUSE</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config = { darkMode: 'class' }</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  .toast { transition: transform .2s, opacity .2s; transform-origin: right; }
+</style>
+</head>
+
+<script>
+
+(function(){
+  const STORAGE_KEY_STOCK = 'gudang_enhanced_stock_v1';
+  const STORAGE_KEY_HISTORY = 'gudang_enhanced_history_v1';
+
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY_STOCK);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) {
+        parsed.forEach(savedItem => {
+          const i = warehouseStock.findIndex(w => w.name === savedItem.name);
+          if (i >= 0) {
+            Object.assign(warehouseStock[i], savedItem);
+          } else {
+            warehouseStock.push(savedItem);
+          }
+        });
+      }
+    }
+  } catch(e){ console.warn('load persisted stock failed', e); }
+
+  try {
+    const savedH = localStorage.getItem(STORAGE_KEY_HISTORY);
+    if (savedH) {
+      const parsedH = JSON.parse(savedH);
+      if (Array.isArray(parsedH)) {
+        parsedH.forEach(h => {
+          if (!warehouseHistory.find(x=>x.id === h.id)) warehouseHistory.unshift(h);
+        });
+      }
+    }
+  } catch(e){ console.warn('load persisted history failed', e); }
+
+  function persistAll(){
+    try{
+      localStorage.setItem(STORAGE_KEY_STOCK, JSON.stringify(warehouseStock));
+      localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(warehouseHistory.slice(0,1000)));
+    }catch(e){ console.warn('persist fail', e); }
+  }
+
+  function addRowToast(msg, kind='info'){ showToast ? showToast(msg, kind) : alert(msg); }
+
+  if (typeof renderWarehouseStock === 'function') {
+    const originalRender = renderWarehouseStock;
+    window.renderWarehouseStock = function(filter=''){
+      originalRender(filter);
+
+      try {
+        const tableWrapper = document.getElementById('warehouseStockTable');
+        if (!tableWrapper) return;
+        const table = tableWrapper.querySelector('table');
+        if (!table) return;
+
+        const thead = table.querySelector('thead tr');
+        if (thead && thead.querySelectorAll('th').length) {
+          const hasUnit = Array.from(thead.querySelectorAll('th')).some(th => (th.dataset.enhancedUnit === '1'));
+          if (!hasUnit) {
+            const headers = thead.querySelectorAll('th');
+            let insertBefore = null;
+            headers.forEach(h=>{ if(h.textContent.trim().toLowerCase().includes('sisa real') || h.textContent.trim().toLowerCase().includes('sisa')) insertBefore = h; });
+            const th = document.createElement('th');
+            th.textContent = 'Satuan';
+            th.className = 'p-2';
+            th.dataset.enhancedUnit = '1';
+            if (insertBefore) thead.insertBefore(th, insertBefore);
+            else thead.appendChild(th);
+            const hasSave = Array.from(thead.querySelectorAll('th')).some(th => (th.dataset.enhancedSave === '1'));
+            if (!hasSave) {
+              const ths = document.createElement('th');
+              ths.textContent = 'Save';
+              ths.className = 'p-2';
+              ths.dataset.enhancedSave = '1';
+              thead.appendChild(ths);
+            }
+          }
+        }
+
+        const tbody = table.querySelector('tbody');
+        if (!tbody) return;
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        rows.forEach(row=>{
+          const firstTd = row.querySelector('td');
+          if (!firstTd) return;
+          const name = firstTd.textContent.trim();
+          const idx = warehouseStock.findIndex(i=>i.name === name);
+          if (idx < 0) return;
+
+          const alreadyUnit = row.querySelector('td[data-enhanced-unit="1"]');
+          if (!alreadyUnit) {
+            const unitCell = document.createElement('td');
+            unitCell.dataset.enhancedUnit = '1';
+            unitCell.className = 'p-2';
+            const unitVal = warehouseStock[idx].unit || (warehouseStock[idx].unit = 'pcs');
+            unitCell.innerHTML = `<input class="w-24 p-1 border rounded text-sm" data-row="${idx}" data-field="unit" value="${unitVal}">`;
+
+            const ref = row.querySelectorAll('td')[4] || null;
+            if (ref) row.insertBefore(unitCell, ref);
+            else row.appendChild(unitCell);
+          }
+
+          const alreadySave = row.querySelector('td[data-enhanced-save="1"]');
+          if (!alreadySave) {
+            const saveCell = document.createElement('td');
+            saveCell.dataset.enhancedSave = '1';
+            saveCell.className = 'p-2';
+            saveCell.innerHTML = `<button class="px-2 py-1 bg-indigo-600 text-white rounded text-xs" data-save-row="${idx}">Save</button>
+                                  <button class="ml-1 px-2 py-1 bg-red-500 text-white rounded text-xs" data-fix-row="${idx}">Fix</button>
+                                  <div class="mt-1 text-xs text-red-600 hidden" data-warning="${idx}">⚠ Selisih</div>`;
+            row.appendChild(saveCell);
+
+            saveCell.querySelector('[data-save-row]').addEventListener('click', (ev)=>{
+              ev.preventDefault();
+              saveRowEdits(idx, row);
+            });
+            // attach fix click (calls existing forceAdjust)
+            saveCell.querySelector('[data-fix-row]').addEventListener('click', (ev)=>{
+              ev.preventDefault();
+              if (typeof forceAdjust === 'function') {
+                forceAdjust(idx);
+                persistAll();
+                addRowToast('Koreksi otomatis diterapkan (forceAdjust).', 'info');
+              } else addRowToast('Fungsi forceAdjust tidak tersedia', 'err');
+            });
+          }
+
+          const warningDiv = row.querySelector(`[data-warning="${idx}"]`);
+          const item = warehouseStock[idx];
+          const totalIn = (item.ins||[]).reduce((a,b)=>a+b,0);
+          const totalOut = (item.outs||[]).reduce((a,b)=>a+b,0);
+          const sisaData = totalIn - totalOut - (item.damaged||0);
+          if (sisaData !== item.realStock) {
+            if (warningDiv) warningDiv.classList.remove('hidden');
+            row.classList.add('ring-1','ring-red-300');
+          } else {
+            if (warningDiv) warningDiv.classList.add('hidden');
+            row.classList.remove('ring-1','ring-red-300');
+          }
+        });
+
+               const unitInputs = table.querySelectorAll('input[data-field="unit"]');
+        unitInputs.forEach(inp=>{
+          inp.removeEventListener('change', unitChangeHandler);
+          inp.addEventListener('change', unitChangeHandler);
+        });
+      } catch(e){
+        console.warn('enhance render error', e);
+      }
+      persistAll();
+    };
+  } else {
+    console.warn('renderWarehouseStock not found; enhancement aborted');
+  }
+
+  function unitChangeHandler(e){
+    const idx = parseInt(e.target.dataset.row);
+    const val = e.target.value || 'pcs';
+    if (warehouseStock[idx]) {
+      warehouseStock[idx].unit = val;
+      persistAll();
+      addRowToast(`Satuan untuk ${warehouseStock[idx].name} diset ke "${val}"`, 'info');
+    }
+  }
+
+  function saveRowEdits(idx, rowEl){
+    try {
+      const item = warehouseStock[idx];
+      if (!item) return;
+      const unitInp = rowEl.querySelector('input[data-field="unit"]');
+      if (unitInp) item.unit = unitInp.value || item.unit || 'pcs';
+      const realInp = rowEl.querySelector('input[onchange*="updateStock"]') || rowEl.querySelector('input[value="'+item.realStock+'"]');
+      if (realInp) {
+        const v = parseInt(realInp.value)||0;
+        item.realStock = v;
+      }
+      const dmgInp = Array.from(rowEl.querySelectorAll('input')).find(i=>i.value===(item.damaged||0).toString() || i.getAttribute('value')===(item.damaged||0).toString());
+
+      const multiIns = rowEl.querySelectorAll('input[data-type="in"]');
+      const multiOuts = rowEl.querySelectorAll('input[data-type="out"]');
+      if (multiIns && multiIns.length){
+        item.ins = Array.from(multiIns).map(i=>parseInt(i.value)||0);
+      }
+      if (multiOuts && multiOuts.length){
+        item.outs = Array.from(multiOuts).map(i=>parseInt(i.value)||0);
+      }
+
+      const beforeSisa = (item._lastSavedSisa !== undefined) ? item._lastSavedSisa : null;
+      const totalIn = (item.ins||[]).reduce((a,b)=>a+b,0);
+      const totalOut = (item.outs||[]).reduce((a,b)=>a+b,0);
+      const sisaData = totalIn - totalOut - (item.damaged||0);
+      warehouseHistory.unshift({
+        id: uid(),
+        date: nowISO(),
+        name: item.name,
+        type: 'EditSave',
+        quantity: sisaData - item.realStock,
+        source: 'UI-Save'
+      });
+      item._lastSavedSisa = sisaData;
+
+      persistAll();
+      addRowToast(`Perubahan untuk "${item.name}" disimpan.`, 'info');
+      renderWarehouseStock(document.getElementById('searchInput')?.value||'');
+      renderHistory && renderHistory();
+    } catch(err){
+      console.error('saveRowEdits error', err);
+      addRowToast('Gagal menyimpan perubahan (cek console).', 'err');
+    }
+  }
+
+  if (typeof saveStockModal === 'function') {
+    const origSaveStockModal = saveStockModal;
+    window.saveStockModal = function(){
+      origSaveStockModal.apply(this, arguments);
+      // after original action, persist
+      try { persistAll(); } catch(e){console.warn(e);}
+    };
+  }
+
+  // also wrap forceAdjust to persist & show toast
+  if (typeof forceAdjust === 'function') {
+    const origForce = forceAdjust;
+    window.forceAdjust = function(idx){
+      origForce.apply(this, arguments);
+      try { persistAll(); addRowToast('Force adjust saved.', 'info'); } catch(e){}
+    };
+  }
+
+  // auto-check: when recalcAndMaybeAlert triggers history pushes, persist them
+  if (typeof recalcAndMaybeAlert === 'function') {
+    const origRecalc = recalcAndMaybeAlert;
+    window.recalcAndMaybeAlert = function(idx, sourceType='auto'){
+      const ret = origRecalc.apply(this, arguments);
+      try { persistAll(); } catch(e){}
+      return ret;
+    };
+  }
+
+  // expose manual "save all" function
+  window.gudang_save_all = function(){
+    persistAll();
+    addRowToast('Semua data disimpan ke localStorage.', 'info');
+  };
+
+  // small init: ensure every item has a unit property
+  warehouseStock.forEach(item=>{ if(!item.unit) item.unit = 'pcs'; });
+
+  // finally persist initial state
+  persistAll();
+
+})();
+</script>
+
+
+<body class="font-Inter bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 p-6">
+
+<!-- Breadcrumb -->
+<nav class="text-sm mb-4" aria-label="Breadcrumb">
+  <ol class="list-none p-0 inline-flex">
+    <li class="flex items-center">Home <span class="mx-2">/</span></li>
+    <li class="flex items-center font-semibold">Gudang</li>
+  </ol>
+</nav>
+
+<!-- Top Bar -->
+<div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+  <div class="flex gap-2 w-full md:w-2/3">
+    <input id="searchInput" type="text" placeholder="Cari barang..." class="p-2 border rounded-lg w-full" oninput="renderWarehouseStock(this.value)">
+    <button class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700" onclick="openStockModal()">Tambah/Edit Stok</button>
+  </div>
+  <div class="flex items-center gap-3">
+    <button id="notifBtn" class="relative p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">🔔<span id="notifBadge" class="absolute -top-1 -right-1 bg-red-600 text-white text-xs rounded-full px-1 hidden">0</span></button>
+    <div class="flex items-center gap-2">
+      <button onclick="exportHistoryCSV()" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">Export CSV</button>
+      <button onclick="exportFilteredHistoryCSV()" class="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700">Export History Filter</button>
+    </div>
+  </div>
+</div>
+
+<!-- Quick Summary + Chart -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+  <div class="col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <div class="p-4 bg-red-600 text-white rounded-lg shadow">
+      <p class="text-sm">Total Stok Barang</p>
+      <p id="cardTotalStock" class="text-2xl font-bold">0</p>
+    </div>
+    <div class="p-4 bg-yellow-500 text-white rounded-lg shadow">
+      <p class="text-sm">Barang Hampir Habis (≤ threshold)</p>
+      <p id="cardLowStock" class="text-2xl font-bold">0</p>
+    </div>
+    <div class="p-4 bg-green-500 text-white rounded-lg shadow">
+      <p class="text-sm">Total Pengadaan Bulan Ini</p>
+      <p id="cardProcurement" class="text-2xl font-bold">0</p>
+    </div>
+    <div class="p-4 bg-blue-500 text-white rounded-lg shadow">
+      <p class="text-sm">Barang Paling Banyak Pergerakan</p>
+      <p id="cardTopMovement" class="text-2xl font-bold">-</p>
+    </div>
+  </div>
+  <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+    <canvas id="stockChart"></canvas>
+  </div>
+</div>
+
+<!-- Main: Table + History -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+  <!-- Table -->
+  <div class="lg:col-span-2">
+    <div id="warehouseStockTable" class="mb-4"></div>
+  </div>
+
+  <!-- History Panel -->
+  <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+    <h3 class="font-semibold mb-2">History & Filter</h3>
+    <div class="space-y-2 mb-3">
+      <input id="histFilterName" placeholder="Filter nama..." class="w-full p-2 border rounded" oninput="renderHistory()">
+      <div class="flex gap-2">
+        <input id="histFrom" type="date" class="p-2 border rounded w-1/2" onchange="renderHistory()">
+        <input id="histTo" type="date" class="p-2 border rounded w-1/2" onchange="renderHistory()">
+      </div>
+      <select id="histType" class="w-full p-2 border rounded" onchange="renderHistory()">
+        <option value="">Semua Tipe</option>
+        <option value="IN">IN</option>
+        <option value="OUT">OUT</option>
+        <option value="Rusak">Rusak</option>
+        <option value="AutoCheck">AutoCheck</option>
+      </select>
+      <input id="histSource" placeholder="Filter source/staf..." class="w-full p-2 border rounded" oninput="renderHistory()">
+    </div>
+    <div class="h-72 overflow-auto">
+      <table class="w-full text-sm text-left">
+        <thead class="text-xs text-gray-500">
+          <tr><th>Tanggal</th><th>Barang</th><th>Tipe</th><th>Qty</th><th>Source</th><th></th></tr>
+        </thead>
+        <tbody id="historyTableBody" class="text-sm"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Notifications popup -->
+<div id="notifPopup" class="hidden absolute right-6 top-20 w-80 bg-white dark:bg-gray-800 border rounded shadow-lg z-50 p-3">
+  <h4 class="font-semibold mb-2">Notifikasi Stok</h4>
+  <ul id="notifList" class="text-sm space-y-1 max-h-64 overflow-auto"></ul>
+</div>
+
+<!-- Toast container -->
+<div id="toastContainer" class="fixed right-6 bottom-6 space-y-2 z-60"></div>
+
+<!-- Modal: Add/Edit Stock (modern) -->
+<div id="stockModal" class="fixed inset-0 bg-black/40 hidden items-center justify-center z-50">
+  <div class="bg-white dark:bg-gray-800 p-6 rounded-lg w-full max-w-md">
+    <h3 id="stockModalTitle" class="text-lg font-semibold mb-3">Tambah / Edit Stok</h3>
+    <div class="space-y-3">
+      <div>
+        <label class="block text-sm mb-1">Nama Barang</label>
+        <input id="modalItemName" class="w-full p-2 border rounded" />
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <label class="block text-sm mb-1">Tipe</label>
+          <select id="modalType" class="w-full p-2 border rounded">
+            <option>IN</option>
+            <option>OUT</option>
+            <option>Rusak</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm mb-1">Jumlah</label>
+          <input id="modalQty" type="number" class="w-full p-2 border rounded" />
+        </div>
+      </div>
+      <div>
+        <label class="block text-sm mb-1">Supplier / Staf</label>
+        <input id="modalSource" class="w-full p-2 border rounded" />
+      </div>
+      <div class="flex justify-end gap-2">
+        <button onclick="closeStockModal()" class="px-4 py-2 bg-gray-400 rounded text-white">Batal</button>
+        <button onclick="saveStockModal()" class="px-4 py-2 bg-green-600 rounded text-white">Simpan</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Edit History -->
+<div id="editHistoryModal" class="fixed inset-0 bg-black/40 hidden items-center justify-center z-50">
+  <div class="bg-white dark:bg-gray-800 p-6 rounded-lg w-full max-w-lg">
+    <h3 class="text-lg font-semibold mb-3">Edit History</h3>
+    <div class="space-y-3">
+      <input id="editHistDate" class="w-full p-2 border rounded" />
+      <input id="editHistName" class="w-full p-2 border rounded" />
+      <select id="editHistType" class="w-full p-2 border rounded">
+        <option>IN</option><option>OUT</option><option>Rusak</option><option>AutoCheck</option>
+      </select>
+      <input id="editHistQty" type="number" class="w-full p-2 border rounded" />
+      <input id="editHistSource" class="w-full p-2 border rounded" />
+      <div class="flex justify-end gap-2">
+        <button onclick="closeEditHistModal()" class="px-4 py-2 bg-gray-400 rounded text-white">Batal</button>
+        <button onclick="saveEditHistory()" class="px-4 py-2 bg-blue-600 rounded text-white">Simpan</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ========= DATA STRUCTURES ========= */
+let LOW_STOCK_THRESHOLD = 10;
+let AUTO_CHECK_INTERVAL_MS = 6000; // 6s for demo; ubah di produksi ke mis. 60000
+let warehouseStock = [
+  { name:'Beras', ins:[120], outs:[30], realStock:90, damaged:0 },
+  { name:'Sayur', ins:[90], outs:[20], realStock:70, damaged:0 },
+  { name:'Buah', ins:[75], outs:[15], realStock:60, damaged:0 },
+  { name:'Ikan', ins:[50], outs:[10], realStock:40, damaged:0 },
+  { name:'Daging', ins:[30], outs:[5], realStock:25, damaged:0 }
+];
+let warehouseHistory = []; // {id, date (ISO), name, type, quantity, source}
+
+/* ========= HELPERS ========= */
+function uid(){ return Math.random().toString(36).slice(2,9); }
+function nowISO(){ return new Date().toISOString(); }
+function formatLocal(dtISO){ return new Date(dtISO).toLocaleString(); }
+function showToast(text, kind='info', ttl=4000){
+  const c = document.getElementById('toastContainer');
+  let el = document.createElement('div');
+  el.className = `toast p-3 rounded shadow-lg ${kind==='err'?'bg-red-600 text-white':kind==='warn'?'bg-yellow-500 text-black':'bg-gray-800 text-white'}`;
+  el.textContent = text;
+  c.appendChild(el);
+  setTimeout(()=>{ el.style.opacity='0'; el.style.transform='translateX(20px)'; }, ttl-400);
+  setTimeout(()=>el.remove(), ttl);
+}
+
+/* ========= RENDER MAIN TABLE ========= */
+let stockChartInstance = null;
+function renderWarehouseStock(filter=''){
+  const stockTable = document.getElementById('warehouseStockTable');
+  let list = warehouseStock.filter(i=>i.name.toLowerCase().includes(filter.toLowerCase()));
+  let html = `<div class="overflow-auto bg-white dark:bg-gray-800 rounded-lg p-3 shadow">
+    <table class="w-full text-sm">
+      <thead class="text-xs text-gray-500">
+        <tr>
+          <th class="p-2">Nama</th>
+          <th class="p-2">IN (multi)</th>
+          <th class="p-2">OUT (multi)</th>
+          <th class="p-2">Sisa Data</th>
+          <th class="p-2">Sisa Real</th>
+          <th class="p-2">Rusak</th>
+          <th class="p-2">Aksi</th>
+        </tr>
+      </thead><tbody>`;
+  list.forEach((item, idx)=>{
+    let totalIn = item.ins.reduce((a,b)=>a+b,0);
+    let totalOut = item.outs.reduce((a,b)=>a+b,0);
+    let sisaData = totalIn - totalOut - (item.damaged||0);
+    let highlight = sisaData !== item.realStock ? 'bg-red-50 dark:bg-red-800' : '';
+    let low = item.realStock <= LOW_STOCK_THRESHOLD ? 'border-l-4 border-yellow-400' : '';
+    // generate inputs for ins and outs
+    let insHtml = item.ins.map((v,i)=>`<input data-idx="${idx}" data-type="in" data-pos="${i}" value="${v}" oninput="updateMultiFromInput(event)" class="w-16 p-1 rounded border mr-1 text-sm">`).join('');
+    let outsHtml = item.outs.map((v,i)=>`<input data-idx="${idx}" data-type="out" data-pos="${i}" value="${v}" oninput="updateMultiFromInput(event)" class="w-16 p-1 rounded border mr-1 text-sm">`).join('');
+    html += `<tr class="${highlight} ${low}">
+      <td class="p-2 font-medium">${item.name}</td>
+      <td class="p-2">${insHtml}
+        <button onclick="addInColumn(${idx})" class="ml-1 text-xs px-2 py-0.5 border rounded">+IN</button>
+      </td>
+      <td class="p-2">${outsHtml}
+        <button onclick="addOutColumn(${idx})" class="ml-1 text-xs px-2 py-0.5 border rounded">+OUT</button>
+      </td>
+      <td class="p-2">${sisaData}</td>
+      <td class="p-2"><input class="w-20 p-1 rounded border" value="${item.realStock}" onchange="updateStock(${idx},'realStock',this.value)"></td>
+      <td class="p-2"><input class="w-20 p-1 rounded border" value="${item.damaged||0}" onchange="updateStock(${idx},'damaged',this.value)"></td>
+      <td class="p-2">
+        <button onclick="openStockModalPrefill(${idx})" class="px-2 py-1 bg-indigo-600 text-white rounded text-xs">Edit</button>
+        <button onclick="forceAdjust(${idx})" class="px-2 py-1 bg-yellow-500 text-white rounded text-xs ml-1">Auto-Fix</button>
+      </td>
+    </tr>`;
+  });
+  html += `</tbody></table></div>`;
+  stockTable.innerHTML = html;
+  renderStockSummary();
+  renderStockChart();
+  renderNotifications();
+}
+
+/* ========= UPDATE MULTI FROM INPUT ========= */
+function updateMultiFromInput(e){
+  const el = e.target;
+  const idx = parseInt(el.dataset.idx);
+  const pos = parseInt(el.dataset.pos);
+  const type = el.dataset.type; // 'in' or 'out'
+  const val = parseInt(el.value) || 0;
+  if(type==='in') warehouseStock[idx].ins[pos] = val;
+  else warehouseStock[idx].outs[pos] = val;
+  recalcAndMaybeAlert(idx, 'manual');
+  renderWarehouseStock(document.getElementById('searchInput').value);
+}
+
+/* ========= ADD IN/OUT COLUMN ========= */
+function addInColumn(idx){
+  warehouseStock[idx].ins.push(0);
+  showToast(`IN column added for ${warehouseStock[idx].name}`);
+  renderWarehouseStock(document.getElementById('searchInput').value);
+}
+function addOutColumn(idx){
+  warehouseStock[idx].outs.push(0);
+  showToast(`OUT column added for ${warehouseStock[idx].name}`);
+  renderWarehouseStock(document.getElementById('searchInput').value);
+}
+
+/* ========= UPDATE STOCK single fields ========= */
+function updateStock(index, key, value){
+  let v = parseInt(value) || 0;
+  warehouseStock[index][key] = v;
+  recalcAndMaybeAlert(index, 'manual');
+  renderWarehouseStock(document.getElementById('searchInput').value);
+}
+
+/* ========= RECALC & ALERT ========= */
+function recalcAndMaybeAlert(index, sourceType='auto'){
+  let item = warehouseStock[index];
+  let totalIn = item.ins.reduce((a,b)=>a+b,0);
+  let totalOut = item.outs.reduce((a,b)=>a+b,0);
+  let sisaData = totalIn - totalOut - (item.damaged||0);
+  // if discrepancy
+  if(sisaData !== item.realStock){
+    // create history auto-check entry
+    let entry = { id: uid(), date: nowISO(), name: item.name, type: 'AutoCheck', quantity: sisaData - item.realStock, source: sourceType };
+    warehouseHistory.unshift(entry); // newest first
+    // notification: toast + notif panel
+    pushNotification(`Selisih stok ${item.name}: data=${sisaData}, real=${item.realStock}`);
+    showToast(`Selisih stok detected: ${item.name}`, 'warn', 6000);
+  }
+  // if low stock
+  if(item.realStock <= LOW_STOCK_THRESHOLD){
+    pushNotification(`Stok kritis: ${item.name} (${item.realStock})`);
+  }
+}
+
+/* ========= NOTIFICATIONS MANAGEMENT ========= */
+function pushNotification(text){
+  const notifList = document.getElementById('notifList');
+  const li = document.createElement('li');
+  li.className = 'text-sm py-1';
+  li.textContent = `${new Date().toLocaleString()} — ${text}`;
+  notifList.prepend(li);
+  const badge = document.getElementById('notifBadge');
+  badge.classList.remove('hidden');
+  badge.textContent = parseInt(badge.textContent || '0') + 1;
+}
+document.getElementById('notifBtn').addEventListener('click', ()=>{
+  document.getElementById('notifPopup').classList.toggle('hidden');
+  document.getElementById('notifBadge').classList.add('hidden');
+});
+
+/* ========= QUICK SUMMARY ========= */
+function renderStockSummary(){
+  const total = warehouseStock.reduce((s,i)=>s+i.realStock,0);
+  document.getElementById('cardTotalStock').textContent = total;
+  document.getElementById('cardTotalStock').dataset.val = total;
+
+  const low = warehouseStock.filter(i=>i.realStock <= LOW_STOCK_THRESHOLD).length;
+  document.getElementById('cardLowStock').textContent = low;
+
+  const proc = warehouseHistory.filter(h => h.type==='IN' && new Date(h.date).getMonth()===new Date().getMonth()).reduce((s,h)=>s+h.quantity, 0);
+  document.getElementById('cardProcurement').textContent = proc;
+
+  // top movement by abs(in-out)
+  let top = warehouseStock.map(i=>{
+    let ins = i.ins.reduce((a,b)=>a+b,0);
+    let outs = i.outs.reduce((a,b)=>a+b,0);
+    return { name:i.name, mv: Math.abs(ins-outs) };
+  }).sort((a,b)=>b.mv-a.mv)[0];
+  document.getElementById('cardTopMovement').textContent = top ? `${top.name} (${top.mv})` : '-';
+}
+
+/* ========= CHART ========= */
+function renderStockChart(){
+  const ctx = document.getElementById('stockChart').getContext('2d');
+  if(stockChartInstance) stockChartInstance.destroy();
+  stockChartInstance = new Chart(ctx, {
+    type:'bar',
+    data:{
+      labels: warehouseStock.map(i=>i.name),
+      datasets:[{ label:'Sisa Real', data: warehouseStock.map(i=>i.realStock), backgroundColor:'rgba(214,40,40,0.7)' }]
+    },
+    options:{ responsive:true, plugins:{ legend:{display:false} }, scales:{ y:{ beginAtZero:true } } }
+  });
+}
+
+/* ========= MODAL: Add/Edit STOCK ========= */
+function openStockModal(){
+  document.getElementById('stockModalTitle').textContent = 'Tambah Stok (IN / OUT / Rusak)';
+  document.getElementById('modalItemName').value = '';
+  document.getElementById('modalType').value = 'IN';
+  document.getElementById('modalQty').value = '';
+  document.getElementById('modalSource').value = '';
+  document.getElementById('stockModal').classList.remove('hidden');
+}
+function openStockModalPrefill(idx){
+  const item = warehouseStock[idx];
+  document.getElementById('stockModalTitle').textContent = `Tambah untuk ${item.name}`;
+  document.getElementById('modalItemName').value = item.name;
+  document.getElementById('modalType').value = 'IN';
+  document.getElementById('modalQty').value = '';
+  document.getElementById('modalSource').value = '';
+  document.getElementById('stockModal').classList.remove('hidden');
+}
+function closeStockModal(){ document.getElementById('stockModal').classList.add('hidden'); }
+function saveStockModal(){
+  let name = document.getElementById('modalItemName').value.trim();
+  let type = document.getElementById('modalType').value;
+  let qty = parseInt(document.getElementById('modalQty').value) || 0;
+  let source = document.getElementById('modalSource').value.trim() || 'Manual';
+  if(!name || qty<=0){ alert('Nama dan jumlah harus diisi dengan benar.'); return; }
+  let idx = warehouseStock.findIndex(i=>i.name.toLowerCase()===name.toLowerCase());
+  if(idx===-1){
+    warehouseStock.push({ name, ins:[], outs:[], realStock:0, damaged:0 });
+    idx = warehouseStock.length -1;
+  }
+  if(type==='IN') warehouseStock[idx].ins.push(qty);
+  else if(type==='OUT') warehouseStock[idx].outs.push(qty);
+  else if(type==='Rusak') warehouseStock[idx].damaged = (warehouseStock[idx].damaged||0) + qty;
+  // update realStock automatically to keep system consistent (but admin can edit realStock manually)
+  warehouseStock[idx].realStock = warehouseStock[idx].ins.reduce((a,b)=>a+b,0) - warehouseStock[idx].outs.reduce((a,b)=>a+b,0) - (warehouseStock[idx].damaged||0);
+  // push history
+  warehouseHistory.unshift({ id: uid(), date: nowISO(), name, type, quantity: qty, source });
+  showToast(`${type} ${qty} recorded for ${name}`, 'info', 3000);
+  closeStockModal();
+  renderWarehouseStock(document.getElementById('searchInput').value);
+}
+
+/* ========= FORCE ADJUST: auto-fix Sisa Data -> RealStock ========= */
+function forceAdjust(idx){
+  let item = warehouseStock[idx];
+  let totalIn = item.ins.reduce((a,b)=>a+b,0);
+  let totalOut = item.outs.reduce((a,b)=>a+b,0);
+  let newReal = totalIn - totalOut - (item.damaged||0);
+  let diff = newReal - item.realStock;
+  item.realStock = newReal;
+  warehouseHistory.unshift({ id: uid(), date: nowISO(), name: item.name, type:'AutoFix', quantity: diff, source:'system' });
+  showToast(`Auto-fix applied for ${item.name} (Δ=${diff})`, 'info', 3500);
+  renderWarehouseStock(document.getElementById('searchInput').value);
+}
+
+/* ========= HISTORY RENDER & FILTER ========= */
+function renderHistory(){
+  const tbody = document.getElementById('historyTableBody');
+  const nameFilter = document.getElementById('histFilterName').value.toLowerCase();
+  const from = document.getElementById('histFrom').value;
+  const to = document.getElementById('histTo').value;
+  const type = document.getElementById('histType').value;
+  const source = document.getElementById('histSource').value.toLowerCase();
+  let list = warehouseHistory.slice(); // copy
+  list = list.filter(h=>{
+    if(nameFilter && !h.name.toLowerCase().includes(nameFilter)) return false;
+    if(type && h.type !== type) return false;
+    if(source && !(h.source||'').toLowerCase().includes(source)) return false;
+    if(from && new Date(h.date) < new Date(from+'T00:00:00')) return false;
+    if(to && new Date(h.date) > new Date(to+'T23:59:59')) return false;
+    return true;
+  });
+  tbody.innerHTML = list.map(h=>`<tr class="align-top">
+    <td class="p-1">${formatLocal(h.date)}</td>
+    <td class="p-1 font-medium">${h.name}</td>
+    <td class="p-1">${h.type}</td>
+    <td class="p-1">${h.quantity}</td>
+    <td class="p-1">${h.source||'-'}</td>
+    <td class="p-1">
+      <button onclick="openEditHistModal('${h.id}')" class="text-xs px-2 py-1 bg-indigo-600 text-white rounded">Edit</button>
+    </td>
+  </tr>`).join('');
+}
+
+/* ========= Edit History Modal ========= */
+let editingHistoryId = null;
+function openEditHistModal(id){
+  const h = warehouseHistory.find(x=>x.id===id);
+  if(!h) return alert('History tidak ditemukan');
+  editingHistoryId = id;
+  document.getElementById('editHistDate').value = h.date;
+  document.getElementById('editHistName').value = h.name;
+  document.getElementById('editHistType').value = h.type;
+  document.getElementById('editHistQty').value = h.quantity;
+  document.getElementById('editHistSource').value = h.source;
+  document.getElementById('editHistoryModal').classList.remove('hidden');
+}
+function closeEditHistModal(){ editingHistoryId = null; document.getElementById('editHistoryModal').classList.add('hidden'); }
+function saveEditHistory(){
+  if(!editingHistoryId) return;
+  const h = warehouseHistory.find(x=>x.id===editingHistoryId);
+  if(!h) return;
+  h.date = document.getElementById('editHistDate').value || h.date;
+  h.name = document.getElementById('editHistName').value || h.name;
+  h.type = document.getElementById('editHistType').value || h.type;
+  h.quantity = parseInt(document.getElementById('editHistQty').value) || h.quantity;
+  h.source = document.getElementById('editHistSource').value || h.source;
+  closeEditHistModal();
+  renderHistory();
+  showToast('History updated', 'info', 2000);
+}
+
+/* ========= EXPORT FILTERED HISTORY ========= */
+function exportHistoryCSV(){
+  if(warehouseHistory.length===0){ alert('Tidak ada history.'); return; }
+  let csv = 'Tanggal,Nama,Tipe,Jumlah,Source\n';
+  warehouseHistory.forEach(h => {
+    csv += `"${formatLocal(h.date)}","${h.name}","${h.type}","${h.quantity}","${h.source||''}"\n`;
+  });
+  downloadBlob(csv, 'history_all.csv');
+}
+function exportFilteredHistoryCSV(){
+  // use same filter as renderHistory
+  const nameFilter = document.getElementById('histFilterName').value.toLowerCase();
+  const from = document.getElementById('histFrom').value;
+  const to = document.getElementById('histTo').value;
+  const type = document.getElementById('histType').value;
+  const source = document.getElementById('histSource').value.toLowerCase();
+  let list = warehouseHistory.slice().filter(h=>{
+    if(nameFilter && !h.name.toLowerCase().includes(nameFilter)) return false;
+    if(type && h.type !== type) return false;
+    if(source && !(h.source||'').toLowerCase().includes(source)) return false;
+    if(from && new Date(h.date) < new Date(from+'T00:00:00')) return false;
+    if(to && new Date(h.date) > new Date(to+'T23:59:59')) return false;
+    return true;
+  });
+  if(list.length===0){ alert('Tidak ada data di filter ini.'); return; }
+  let csv = 'Tanggal,Nama,Tipe,Jumlah,Source\n';
+  list.forEach(h => csv += `"${formatLocal(h.date)}","${h.name}","${h.type}","${h.quantity}","${h.source||''}"\n`);
+  downloadBlob(csv, 'history_filtered.csv');
+}
+function downloadBlob(text, filename){
+  const blob = new Blob([text], { type:'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  a.remove(); URL.revokeObjectURL(url);
+}
+
+/* ========= AUTO-CHECK (simulate realtime) ========= */
+function autoCheckAll(){
+  warehouseStock.forEach((_, idx) => {
+    recalcAndMaybeAlert(idx, 'auto');
+  });
+  // refresh UI
+  renderWarehouseStock(document.getElementById('searchInput').value);
+  renderHistory();
+}
+/* run periodically */
+setInterval(autoCheckAll, AUTO_CHECK_INTERVAL_MS);
+
+/* ========= INITIALIZE ========= */
+function renderNotifications(){ /* already updated in pushNotification usage */ }
+function renderAll(){
+  renderWarehouseStock('');
+  renderHistory();
+}
+renderAll();
+
+/* ========= for initial demo push some history entries ========= */
+warehouseHistory.unshift({ id: uid(), date: nowISO(), name:'Beras', type:'IN', quantity: 120, source:'Supplier A'});
+warehouseHistory.unshift({ id: uid(), date: nowISO(), name:'Sayur', type:'IN', quantity: 90, source:'Supplier B'});
+renderAll();
+
+</script>
+<!-- ========== PART 2: NON-DESTRUCTIVE PATCH (add columns, save permanen, auto-calc sisaData) ========== -->
+<script>
+
+
+/* ---------- CONFIG ---------- */
+const STORAGE_KEY_GUDANG = "ss_supply_gudang_data_v1";
+const STORAGE_KEY_EXTRA_COLS = "ss_supply_gudang_extra_cols_v1";
+const MAX_EXTRA_COLS = 5;
+
+/* ---------- LOAD saved gudang kalau ada (merge dengan warehouseStock lama) ---------- */
+window.addEventListener("load", () => {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY_GUDANG);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) {
+        // merge by name — keep original objects but merge props (non-destructive)
+        parsed.forEach(savedItem => {
+          const idx = warehouseStock.findIndex(w => w.name === savedItem.name);
+          if (idx >= 0) {
+            // merge but keep arrays (ins/outs) if present
+            if (savedItem.ins) warehouseStock[idx].ins = savedItem.ins;
+            if (savedItem.outs) warehouseStock[idx].outs = savedItem.outs;
+            if (typeof savedItem.realStock === 'number') warehouseStock[idx].realStock = savedItem.realStock;
+            if (typeof savedItem.damaged === 'number') warehouseStock[idx].damaged = savedItem.damaged;
+            if (Array.isArray(savedItem.extras)) warehouseStock[idx].extras = savedItem.extras;
+            if (savedItem.unit) warehouseStock[idx].unit = savedItem.unit;
+          } else {
+            // new item — push whole object
+            warehouseStock.push(savedItem);
+          }
+        });
+        console.log("📥 Gudang: data merged from STORAGE_KEY_GUDANG");
+      }
+    }
+  } catch (e) { console.warn("Load gudang failed:", e); }
+
+  // load extra columns meta
+  try {
+    const cols = JSON.parse(localStorage.getItem(STORAGE_KEY_EXTRA_COLS) || "[]");
+    if (Array.isArray(cols) && cols.length) {
+      window.__extraCols = cols.slice(0, MAX_EXTRA_COLS);
+    } else {
+      window.__extraCols = [];
+    }
+  } catch(e){ window.__extraCols = []; }
+
+  // ensure each item has extras array length matching extraCols
+  warehouseStock.forEach(item=>{
+    if (!Array.isArray(item.extras)) item.extras = [];
+    // normalize extras length
+    while(item.extras.length < (window.__extraCols?.length||0)) item.extras.push('');
+    if (item.extras.length > (window.__extraCols?.length||0)) item.extras = item.extras.slice(0, window.__extraCols.length);
+  });
+
+  // inject Save Permanen and Add Column buttons to UI (next to Export buttons) — idempotent
+  injectGlobalControls();
+
+  // finally re-render (safe because original render functions exist)
+  try{ renderWarehouseStock(document.getElementById('searchInput')?.value || ''); renderHistory(); }catch(e){}
+});
+
+/* ---------- SAVE / LOAD helpers ---------- */
+function saveGudangToLocal(silent=false){
+  try{
+    localStorage.setItem(STORAGE_KEY_GUDANG, JSON.stringify(warehouseStock));
+    localStorage.setItem(STORAGE_KEY_EXTRA_COLS, JSON.stringify(window.__extraCols || []));
+    if(!silent) showToast("✅ Data gudang disimpan permanen.", 'info', 2200);
+    return true;
+  } catch(e){
+    console.error("saveGudangToLocal:", e);
+    if(!silent) alert("❌ Gagal menyimpan data: " + e.message);
+    return false;
+  }
+  // === Konfigurasi dasar ===
+const MAX_EXTRA_COLS = 5;
+const STORAGE_KEY_EXTRA_COLS = 'gudang_extra_cols';
+window.__extraCols = JSON.parse(localStorage.getItem(STORAGE_KEY_EXTRA_COLS) || '[]');
+
+// Tombol Add Column
+const addColBtn = document.createElement("button");
+addColBtn.textContent = "+ Add New Column";
+addColBtn.className = "px-3 py-2 bg-gray-300 text-black rounded ml-2";
+addColBtn.onclick = () => {
+  if ((window.__extraCols || []).length >= MAX_EXTRA_COLS) {
+    alert('Maksimum extra columns: ' + MAX_EXTRA_COLS);
+    return;
+  }
+  const name = prompt('Nama kolom baru (singkat):');
+  if (!name) return;
+
+  window.__extraCols.push(name);
+  warehouseStock.forEach(it => {
+    if (!Array.isArray(it.extras)) it.extras = [];
+    it.extras.push('');
+  });
+
+  localStorage.setItem(STORAGE_KEY_EXTRA_COLS, JSON.stringify(window.__extraCols));
+  renderWarehouseStock(document.getElementById('searchInput')?.value || '');
+  showToast(`Kolom "${name}" ditambahkan.`, 'info');
+};
+
+const delColBtn = document.createElement("button");
+delColBtn.textContent = "− Delete Column";
+delColBtn.className = "px-3 py-2 bg-red-400 text-white rounded ml-2";
+delColBtn.onclick = () => {
+  if (!(window.__extraCols || []).length) {
+    alert('Tidak ada kolom ekstra.');
+    return;
+  }
+
+  let message = "Pilih kolom yang akan dihapus:\n";
+  window.__extraCols.forEach((c, i) => {
+    message += `${i + 1}. ${c}\n`;
+  });
+  const idx = parseInt(prompt(message + "\nMasukkan nomor kolom yang akan dihapus:")) - 1;
+
+  if (isNaN(idx) || idx < 0 || idx >= window.__extraCols.length) {
+    alert("Nomor kolom tidak valid.");
+    return;
+  }
+
+  if (!confirm(`Hapus kolom "${window.__extraCols[idx]}"? Data akan hilang.`)) return;
+
+  // Hapus kolom dari meta dan data
+  window.__extraCols.splice(idx, 1);
+  warehouseStock.forEach(it => {
+    if (Array.isArray(it.extras)) it.extras.splice(idx, 1);
+  });
+
+  localStorage.setItem(STORAGE_KEY_EXTRA_COLS, JSON.stringify(window.__extraCols));
+  renderWarehouseStock(document.getElementById('searchInput')?.value || '');
+  showToast('Kolom berhasil dihapus.', 'info');
+};
+
+// Tambahkan tombol ke toolbar (sesuaikan penempatan)
+const toolbar = document.querySelector('#toolbar') || document.body;
+toolbar.appendChild(addColBtn);
+toolbar.appendChild(delColBtn);
+
+// === Modifikasi renderWarehouseStock agar tampil kolom ekstra ===
+(function wrapRenderForExtraCols() {
+  if (typeof renderWarehouseStock !== 'function') return;
+  if (renderWarehouseStock._extraWrapped) return;
+  const orig = renderWarehouseStock;
+
+  window.renderWarehouseStock = function (filter = '') {
+    orig(filter);
+
+    const tableWrapper = document.getElementById('warehouseStockTable');
+    if (!tableWrapper) return;
+    const table = tableWrapper.querySelector('table');
+    if (!table) return;
+
+    const theadRow = table.querySelector('thead tr');
+    const tbody = table.querySelector('tbody');
+
+    // Hapus header & sel ekstra lama
+    Array.from(theadRow.querySelectorAll('th[data-extra-header="1"]')).forEach(e => e.remove());
+    Array.from(tbody.querySelectorAll('td[data-extra-cell="1"], td[data-extra-save="1"]')).forEach(e => e.remove());
+
+    // Tambahkan header kolom ekstra
+    (window.__extraCols || []).forEach((col, idx) => {
+      const th = document.createElement('th');
+      th.dataset.extraHeader = '1';
+      th.className = 'p-2';
+      th.innerHTML = `${col} <span class="text-xs text-gray-400">(${idx + 1})</span>`;
+      theadRow.appendChild(th);
+    });
+
+
+    Array.from(tbody.querySelectorAll('tr')).forEach((row, ridx) => {
+      const item = warehouseStock[ridx];
+      if (!item) return;
+      if (!Array.isArray(item.extras)) item.extras = [];
+
+      (window.__extraCols || []).forEach((col, idx) => {
+        const td = document.createElement('td');
+        td.dataset.extraCell = '1';
+        td.className = 'p-2';
+        const val = item.extras[idx] ?? '';
+        td.innerHTML = `<input data-item="${ridx}" data-extra-pos="${idx}" class="w-28 p-1 border rounded text-sm" value="${val}">`;
+        row.appendChild(td);
+      });
+
+      if ((window.__extraCols || []).length) {
+        const tdSave = document.createElement('td');
+        tdSave.dataset.extraSave = '1';
+        tdSave.innerHTML = `<button class="px-2 py-1 bg-blue-600 text-white text-xs rounded" data-save-extras="${ridx}">Save Extras</button>`;
+        row.appendChild(tdSave);
+
+        tdSave.querySelector('button').addEventListener('click', () => {
+          const inputs = row.querySelectorAll('input[data-item="' + ridx + '"]');
+          inputs.forEach(inp => {
+            const pos = parseInt(inp.dataset.extraPos);
+            item.extras[pos] = inp.value;
+          });
+          saveGudangToLocal(true);
+          showToast(`Extras untuk "${item.name}" disimpan.`, 'info');
+        });
+      }
+    });
+  };
+  renderWarehouseStock._extraWrapped = true;
+})();
+
+}
+
+/* ---------- inject global controls (Save Permanen, Add Column) ---------- */
+function injectGlobalControls(){
+  try {
+    // find Export CSV button (exists in original code)
+    const exportBtn = document.querySelector("button[onclick='exportHistoryCSV()']");
+    const exportFilteredBtn = document.querySelector("button[onclick='exportFilteredHistoryCSV()']");
+    if (!exportBtn) return;
+
+    // avoid duplicate insertion
+    if (document.getElementById('gudang_save_permanen_btn')) return;
+
+    // Save Permanen button
+    const saveBtn = document.createElement("button");
+    saveBtn.id = 'gudang_save_permanen_btn';
+    saveBtn.textContent = "💾 Save Permanen";
+    saveBtn.className = "px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 ml-2";
+    saveBtn.onclick = ()=> saveGudangToLocal(false);
+
+    // Add Column button (for extra columns)
+    const addColBtn = document.createElement("button");
+    addColBtn.id = 'gudang_add_col_btn';
+    addColBtn.textContent = "+ Add Column";
+    addColBtn.className = "px-3 py-2 bg-gray-300 text-black rounded ml-2";
+    addColBtn.onclick = ()=> {
+      if ((window.__extraCols||[]).length >= MAX_EXTRA_COLS) { alert('Maksimum extra columns: ' + MAX_EXTRA_COLS); return;}
+      const name = prompt('Nama kolom baru (singkat):');
+      if (!name) return;
+      window.__extraCols.push(name);
+      // add empty extra value for each item
+      warehouseStock.forEach(it=>{ if(!Array.isArray(it.extras)) it.extras=[]; it.extras.push(''); });
+      saveGudangToLocal(true);
+      renderWarehouseStock(document.getElementById('searchInput')?.value||'');
+      showToast(`Kolom "${name}" ditambahkan.`, 'info');
+    };
+
+    // Remove Column dropdown/button: small UI to remove last extra column
+    const removeColBtn = document.createElement("button");
+    removeColBtn.id = 'gudang_remove_col_btn';
+    removeColBtn.textContent = "− Remove Column";
+    removeColBtn.className = "px-3 py-2 bg-red-400 text-white rounded ml-2";
+    removeColBtn.onclick = ()=> {
+      if(!(window.__extraCols||[]).length){ alert('Tidak ada kolom ekstra.'); return; }
+      if(!confirm(`Hapus kolom "${window.__extraCols[window.__extraCols.length-1]}"? Data kolom akan hilang.`)) return;
+      // remove last column meta and values
+      window.__extraCols.pop();
+      warehouseStock.forEach(it=>{ if(Array.isArray(it.extras)) it.extras.pop(); });
+      saveGudangToLocal(true);
+      renderWarehouseStock(document.getElementById('searchInput')?.value||'');
+      showToast('Kolom terakhir dihapus.', 'info');
+    };
+
+    // Insert controls next to exportFilteredBtn if present, otherwise after exportBtn
+    const insertTarget = exportFilteredBtn || exportBtn;
+    insertTarget.after(removeColBtn);
+    removeColBtn.after(addColBtn);
+    addColBtn.after(saveBtn);
+  } catch(e){ console.warn('injectGlobalControls failed', e); }
+}
+
+/* ---------- Enhance table after original render: add extra columns UI ---------- */
+/* We wrap existing renderWarehouseStock if not already enhanced (idempotent) */
+(function wrapRenderForExtraCols(){
+  if (typeof renderWarehouseStock !== 'function') return;
+  // Avoid double-wrapping
+  if (renderWarehouseStock._extraWrapped) return;
+  const orig = renderWarehouseStock;
+  window.renderWarehouseStock = function(filter=''){
+    // call original render (keeps all original table behavior)
+    orig(filter);
+
+    // now enrich table with extra columns (in a non-destructive way)
+    try {
+      const tableWrapper = document.getElementById('warehouseStockTable');
+      if (!tableWrapper) return;
+      const table = tableWrapper.querySelector('table');
+      if (!table) return;
+
+      const theadRow = table.querySelector('thead tr');
+      if (!theadRow) return;
+
+      // ensure we only add extra header cells once (clean up existing extra headers first)
+      // remove any header cells that have data-extra-header
+      Array.from(theadRow.querySelectorAll('th[data-extra-header="1"]')).forEach(h=>h.remove());
+      // insert extra headers just before the real stock column (Sisa Real) if present, else at end
+      const headerCells = Array.from(theadRow.querySelectorAll('th'));
+      // find index for Sisa Real or Sisa Data
+      let insertBefore = null;
+      headerCells.forEach(h=>{
+        const txt = h.textContent.trim().toLowerCase();
+        if (txt.includes('sisa real')) insertBefore = h;
+      });
+
+      // add headers for each extra col
+      (window.__extraCols || []).forEach((colName, cidx) => {
+        const th = document.createElement('th');
+        th.dataset.extraHeader = '1';
+        th.dataset.extraIdx = cidx;
+        th.className = 'p-2';
+        th.innerHTML = `${colName} <span class="text-xs text-gray-400">(${cidx+1})</span>`;
+        // small delete button for this column
+        const delBtn = document.createElement('button');
+        delBtn.className = 'ml-2 text-xs text-red-600';
+        delBtn.textContent = '×';
+        delBtn.title = 'Hapus kolom ini';
+        delBtn.onclick = (ev)=> {
+          ev.stopPropagation();
+          if(!confirm(`Hapus kolom "${colName}"? Data akan hilang.`)) return;
+          // remove column index cidx: update meta and rows
+          window.__extraCols.splice(cidx,1);
+          warehouseStock.forEach(it=>{
+            if (Array.isArray(it.extras)) it.extras.splice(cidx,1);
+          });
+          saveGudangToLocal(true);
+          renderWarehouseStock(document.getElementById('searchInput')?.value||'');
+        };
+        th.appendChild(delBtn);
+
+        if (insertBefore) theadRow.insertBefore(th, insertBefore);
+        else theadRow.appendChild(th);
+      });
+
+      // Also ensure there's a header for "Extras actions/save" if not present
+      const hasExtrasSave = theadRow.querySelector('th[data-extras-save="1"]');
+      if (!hasExtrasSave && (window.__extraCols||[]).length){
+        const ths = document.createElement('th');
+        ths.dataset.extrasSave = '1';
+        ths.className = 'p-2';
+        ths.textContent = 'Extras';
+        theadRow.appendChild(ths);
+      }
+
+      // For each body row: add input cells for extras
+      const tbody = table.querySelector('tbody');
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+      rows.forEach(row => {
+        // remove any existing extra cells we previously added to avoid duplicates
+        Array.from(row.querySelectorAll('td[data-extra-cell="1"]')).forEach(x=>x.remove());
+        Array.from(row.querySelectorAll('td[data-extras-save-cell="1"]')).forEach(x=>x.remove());
+
+        // find name to map to warehouseStock item
+        const firstTd = row.querySelector('td');
+        if (!firstTd) return;
+        const name = firstTd.textContent.trim();
+        const idx = warehouseStock.findIndex(i=>i.name === name);
+        if (idx < 0) return;
+        const item = warehouseStock[idx];
+
+        // ensure item.extras exists and matches length
+        if (!Array.isArray(item.extras)) item.extras = [];
+        while(item.extras.length < (window.__extraCols||[]).length) item.extras.push('');
+
+        // insert a td per extra column
+        (window.__extraCols || []).forEach((colName, cidx) => {
+          const td = document.createElement('td');
+          td.dataset.extraCell = '1';
+          td.dataset.extraIdx = cidx;
+          td.className = 'p-2';
+          // create input, allow edit; value from item.extras[cidx]
+          const val = item.extras[cidx] ?? '';
+          td.innerHTML = `<input data-item="${idx}" data-extra-pos="${cidx}" class="w-28 p-1 border rounded text-sm" value="${escapeHtml(val)}">`;
+          // append before sisaReal cell (try to find it)
+          // heuristic: find td that contains input onchange updateStock for realStock and insert before it
+          const tds = row.querySelectorAll('td');
+          // attempt to insert before the realStock input (we assume it's within 5th td)
+          const ref = tds[4] || null;
+          if (ref) row.insertBefore(td, ref);
+          else row.appendChild(td);
+        });
+
+        // add a small cell with save-per-row for extras (if extra cols exist)
+        if ((window.__extraCols||[]).length){
+          const saveCell = document.createElement('td');
+          saveCell.dataset.extrasSaveCell = '1';
+          saveCell.className = 'p-2';
+          saveCell.innerHTML = `<button class="px-2 py-1 bg-indigo-600 text-white rounded text-xs" data-row-save-extras="${idx}">Save Extras</button>
+                                <button class="ml-1 px-2 py-1 bg-gray-400 text-black rounded text-xs" data-row-reset-extras="${idx}">Reset</button>`;
+          row.appendChild(saveCell);
+
+          // attach handlers
+          saveCell.querySelector(`[data-row-save-extras="${idx}"]`).addEventListener('click', e=>{
+            e.preventDefault();
+            // read inputs in this row matching data-item idx
+            const inputs = row.querySelectorAll(`input[data-item="${idx}"][data-extra-pos]`);
+            inputs.forEach(inp=>{
+              const pos = parseInt(inp.dataset.extraPos);
+              const v = inp.value;
+              if (!Array.isArray(item.extras)) item.extras = [];
+              item.extras[pos] = v;
+            });
+            // persist
+            saveGudangToLocal(true);
+            showToast(`Extras untuk "${item.name}" disimpan.`, 'info');
+            // push history marker
+            warehouseHistory.unshift({ id:uid(), date:nowISO(), name:item.name, type:'ExtrasSave', quantity:0, source:'UI-Extras' });
+            renderHistory && renderHistory();
+          });
+
+          saveCell.querySelector(`[data-row-reset-extras="${idx}"]`).addEventListener('click', e=>{
+            e.preventDefault();
+            if(!confirm('Reset nilai extra untuk baris ini ke kosong?')) return;
+            item.extras = (window.__extraCols||[]).map(()=> '');
+            saveGudangToLocal(true);
+            renderWarehouseStock(document.getElementById('searchInput')?.value||'');
+            showToast(`Extras untuk "${item.name}" direset.`, 'info');
+          });
+        }
+      });
+
+      // attach change handler for inputs we created (to auto-update in-memory when edited)
+      const extraInputs = table.querySelectorAll('input[data-extra-pos]');
+      extraInputs.forEach(inp=>{
+        inp.removeEventListener('change', extraInputChangeHandler);
+        inp.addEventListener('change', extraInputChangeHandler);
+      });
+
+      // Persist meta
+      localStorage.setItem(STORAGE_KEY_EXTRA_COLS, JSON.stringify(window.__extraCols || []));
+      // Also persist stock short-term
+      saveGudangToLocal(true);
+
+    } catch(e){
+      console.warn('Enhance extras error', e);
+    }
+  };
+  window.renderWarehouseStock._extraWrapped = true;
+})();
+
+function extraInputChangeHandler(e){
+  try {
+    const inp = e.target;
+    const itemIdx = parseInt(inp.dataset.item);
+    const pos = parseInt(inp.dataset.extraPos);
+    if (isNaN(itemIdx) || isNaN(pos)) return;
+    if (!warehouseStock[itemIdx]) return;
+    warehouseStock[itemIdx].extras = warehouseStock[itemIdx].extras || [];
+    warehouseStock[itemIdx].extras[pos] = inp.value;
+    // don't auto-save to disk here to allow user to Save Extras per-row or Save Permanen
+  } catch(err){ console.warn(err); }
+}
+
+/* ---------- Utility: escapeHtml for safe innerHTML usage ---------- */
+function escapeHtml(s){
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/[&<>"']/g, function(m){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m]; });
+}
+
+/* ---------- Hook into existing updateStock and forceAdjust to auto-save (non-destructive) ---------- */
+(function hookMutators(){
+  // wrap updateStock tanpa auto-save
+  if (typeof updateStock === 'function' && !updateStock._patched_for_save) {
+    const orig = updateStock;
+    window.updateStock = function(index, key, value){
+      const ret = orig.apply(this, arguments);
+      // Tidak langsung save di sini — biar manual save saja
+      return ret;
+    };
+    window.updateStock._patched_for_save = true;
+  }
+
+  // wrap forceAdjust tanpa auto-save
+  if (typeof forceAdjust === 'function' && !forceAdjust._patched_for_save) {
+    const orig = forceAdjust;
+    window.forceAdjust = function(index){
+      const ret = orig.apply(this, arguments);
+      return ret;
+    };
+    window.forceAdjust._patched_for_save = true;
+  }
+
+  // wrap saveStockModal tanpa auto-save
+  if (typeof saveStockModal === 'function' && !saveStockModal._patched_for_save) {
+    const orig = saveStockModal;
+    window.saveStockModal = function(){
+      const ret = orig.apply(this, arguments);
+      return ret;
+    };
+    window.saveStockModal._patched_for_save = true;
+  }
+})();
+
+
+
+window.gudangAddColumn = function(name){
+  if(!name) throw new Error('Nama kolom dibutuhkan');
+  if ((window.__extraCols||[]).length >= MAX_EXTRA_COLS) throw new Error('Maksimum extra columns reached');
+  window.__extraCols.push(name);
+  warehouseStock.forEach(it=>{ if(!Array.isArray(it.extras)) it.extras=[]; it.extras.push(''); });
+  saveGudangToLocal(true);
+  renderWarehouseStock(document.getElementById('searchInput')?.value||'');
+  return true;
+};
+window.gudangRemoveColumn = function(idx){
+  if(typeof idx !== 'number') throw new Error('index harus number');
+  if (!window.__extraCols || idx < 0 || idx >= window.__extraCols.length) throw new Error('index invalid');
+  window.__extraCols.splice(idx,1);
+  warehouseStock.forEach(it=>{ if(Array.isArray(it.extras)) it.extras.splice(idx,1); });
+  saveGudangToLocal(true);
+  renderWarehouseStock(document.getElementById('searchInput')?.value||'');
+  return true;
+};
+
+
+(function enhanceSisaDataUI(){
+
+  if (typeof renderWarehouseStock !== 'function') return;
+  if (renderWarehouseStock._sisaUXWrapped) return;
+  const orig = renderWarehouseStock;
+  window.renderWarehouseStock = function(filter=''){
+    orig(filter);
+    try {
+      const table = document.getElementById('warehouseStockTable')?.querySelector('table');
+      if (!table) return;
+      const rows = Array.from(table.querySelectorAll('tbody tr'));
+      rows.forEach(row=>{
+        const firstTd = row.querySelector('td');
+        if (!firstTd) return;
+        const name = firstTd.textContent.trim();
+        const idx = warehouseStock.findIndex(i=>i.name === name);
+        if (idx<0) return;
+        const item = warehouseStock[idx];
+      
+        const totalIn = (item.ins||[]).reduce((a,b)=>a+b,0);
+        const totalOut = (item.outs||[]).reduce((a,b)=>a+b,0);
+        const sisaData = totalIn - totalOut - (item.damaged||0);
+
+     
+        const tds = row.querySelectorAll('td');
+        const sisaCell = tds[3]; // 0-based
+        if (sisaCell) {
+          sisaCell.innerHTML = `<span title="Sisa Data dihitung otomatis dari IN - OUT - Rusak">${sisaData}</span>`;
+         
+          if (item.realStock !== sisaData) {
+            let fixBtn = row.querySelector('button[data-quick-fix="'+idx+'"]');
+            if (!fixBtn) {
+              fixBtn = document.createElement('button');
+              fixBtn.dataset['quickFix'] = idx;
+              fixBtn.className = 'ml-2 px-1 py-0.5 text-xs bg-yellow-500 text-white rounded';
+              fixBtn.textContent = 'Fix';
+              fixBtn.title = 'Setel Sisa Real = Sisa Data';
+              fixBtn.onclick = ()=> {
+                if(!confirm(`Set Sisa Real ${item.name} = ${sisaData}?`)) return;
+                item.realStock = sisaData;
+                warehouseHistory.unshift({ id:uid(), date:nowISO(), name:item.name, type:'AutoFix', quantity: sisaData - item.realStock, source:'quick-fix' });
+                saveGudangToLocal(true);
+                renderWarehouseStock(document.getElementById('searchInput')?.value||'');
+              };
+              sisaCell.appendChild(fixBtn);
+            }
+          } else {
+            const existing = row.querySelector('button[data-quick-fix="'+idx+'"]');
+            if (existing) existing.remove();
+          }
+        }
+      });
+    } catch(e){ console.warn('sisaDataUX patch fail', e); }
+  };
+  window.renderWarehouseStock._sisaUXWrapped = true;
+})();
+
+/* ---------- Final: small helpers to inspect state (dev) ---------- */
+window.gudang_state = function(){
+  return { stock: warehouseStock, history: warehouseHistory, extraCols: window.__extraCols || [] };
+};
+
+</script>
+<!-- ========== END PART 2 ========== -->
+
+</body>
+</html>
