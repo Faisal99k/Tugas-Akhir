@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Masuk - Gudang Packing NS WAREHOUSE</title>
+    <script src="datapacking.js"></script>
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <style>
+        :root {
+            --bg-color-main: rgba(216, 63, 63, 0.45);
+            --bg-color-container: rgba(255, 255, 255, 1);
+            --text-color-main: #333;
+            --text-color-light: #555;
+            --input-border: #c8d6e5;
+            --form-bg: white;
+            --box-shadow-color: rgba(228, 84, 84, 0.25);
+            --visual-text-color: white;
+        }
+
+        .dark-mode {
+            --bg-color-main: rgba(26, 26, 46, 0.8);
+            --bg-color-container: rgba(43, 43, 77, 0.95);
+            --text-color-main: #e0e0e0;
+            --text-color-light: #bbb;
+            --input-border: #444;
+            --form-bg: #1a1a2e;
+            --box-shadow-color: rgba(0, 0, 0, 0.5);
+            --visual-text-color: #f0f0f0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-image: url("E:/TugasAkhir/Background.png");
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-color: var(--bg-color-main);
+            background-blend-mode: overlay;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            color: var(--text-color-main);
+            transition: background-color 0.5s, color 0.5s;
+        }
+
+        .login-container {
+            display: flex;
+            background: var(--bg-color-container);
+            backdrop-filter: blur(10px);
+            border-radius: 14px;
+            box-shadow: 0 10px 60px var(--box-shadow-color);
+            overflow: hidden;
+            width: 700px;
+            max-width: 100%;
+            min-height: 400px;
+            transition: background 0.5s, box-shadow 0.5s;
+        }
+
+        .login-visual {
+            background: linear-gradient(135deg, #0919f8 0%, #e408c6 100%);
+            background-image:url("D:/Packing/Gudang.jpg");
+            color: var(--visual-text-color);
+            width: 40%;
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            text-align: center;
+            background-blend-mode: overlay;
+            transition: background-blend-mode 0.5s;
+        }
+
+        .dark-mode .login-visual {
+            background: linear-gradient(135deg, #440a00 0%, #5e2800 100%);
+            background-blend-mode: multiply;
+        }
+
+        .login-form-area {
+            width: 60%;
+            background-color: var(--form-bg);
+            background-image:url("D:/Packing/Gudang.jpg");
+            background-blend-mode: lighten;
+            padding: 40px 50px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            transition: background-color 0.5s;
+        }
+
+        .login-form h3, .register-form h3 { color: var(--text-color-main); }
+
+        .logo {
+            width: 100px;
+            height: 100px;
+            display: block;
+            margin: 0 auto 25px auto;
+            border-radius: 50%;
+            box-shadow: 0 8px 28px rgba(0,0,0,0.1);
+            object-fit: cover;
+        }
+
+        #notification {
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            display: none;
+            font-size: 14px;
+        }
+
+        .input-group {
+            position: relative;
+            margin-bottom: 18px;
+            max-width: 420px;
+        }
+        .input-group i {
+            position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: var(--text-color-light);
+        }
+        .input-group input {
+            width: 100%;
+            padding: 14px 14px 14px 45px;
+            border: 1px solid var(--input-border);
+            border-radius: 6px;
+            box-sizing: border-box;
+            background-color: var(--form-bg);
+            color: var(--text-color-main);
+            transition: background-color 0.5s, border-color 0.5s, color 0.5s;
+        }
+
+        .showpw { margin: -8px 0 12px 0; font-size: 14px; display: inline-block; color: var(--text-color-light); }
+
+        .btn-primary {
+            padding: 14px; width: 100%; border: none; border-radius: 6px;
+            background: linear-gradient(90deg, #00c6ff 0%, #0072ff 100%); 
+            color: white; font-size: 17px; font-weight: bold; cursor: pointer;
+            transition: 0.3s;
+        }
+        .btn-primary:hover { opacity: 0.9; }
+
+        .extra { margin-top: 10px; display: flex; justify-content: space-between; font-size: 14px; color: var(--text-color-light); }
+
+        a { color: #0072ff; text-decoration: none; transition: color 0.3s; }
+        .dark-mode a { color: #4cd1c5; }
+        a:hover { text-decoration: underline; }
+
+        .login-form h3 { margin-top: 0; }
+        .register-form h3 { margin-top: 0; }
+        .register-form { display: none; }
+
+        .welcome-title {
+            color: #f3160e;
+            font-size: 48px;
+            margin-bottom: 5px;
+        }
+
+        .theme-switch-wrapper {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            align-items: center;
+            z-index: 10;
+            color: var(--text-color-main);
+        }
+        .theme-switch-wrapper label {
+            margin-right: 10px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .toggle-icon { margin-right: 5px; }
+
+        #theme-toggle { opacity: 0; width: 0; height: 0; }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 45px;
+            height: 25px;
+        }
+
+        .switch input { opacity: 0; width: 0; height: 0; }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 25px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 17px;
+            width: 17px;
+            left: 4px;
+            bottom: 4px;
+            background-color: rgb(176, 9, 241);
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider { background-color: #2196F3; }
+        input:checked + .slider:before { transform: translateX(20px); }
+
+        @media (max-width: 768px) {
+            .login-container { flex-direction: column; }
+            .login-visual, .login-form-area { width: 100%; padding: 25px; }
+            .input-group { max-width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="theme-switch-wrapper">
+    <span class="toggle-icon fas fa-sun"></span>
+    <label class="switch">
+        <input type="checkbox" id="theme-toggle">
+        <span class="slider"></span>
+    </label>
+    <span class="toggle-icon fas fa-moon"></span>
+</div>
+<div class="login-container">
+
+    <div class="login-visual">
+        <h2 class="welcome-title">Selamat datang</h2>
+        <p>Silakan masuk untuk mengakses sistem Gudang Packing NS WAREHOUSE</p>
+    </div>
+
+    <div class="login-form-area">
+
+        <img src="E:/TugasAkhir/LogoNS.png" class="logo" alt="LogoNS.png">
+
+        <div id="notification"></div>
+
+        <form class="login-form" onsubmit="return loginUser(event);">
+            <h3>Silakan Masuk</h3>
+
+            <div class="input-group">
+                <i class="fas fa-user"></i>
+                <input type="text" id="penggunaLogin" placeholder="Pengguna / Email" required>
+            </div>
+
+            <div class="input-group">
+                <i class="fas fa-lock"></i>
+                <input type="password" id="passwordLogin" placeholder="Password" required>
+            </div>
+
+            <label class="showpw"><input type="checkbox" id="toggleLoginPw"> Tampilkan Password</label>
+
+            <div class="extra">
+                <label><input type="checkbox"> Ingat saya</label>
+                <a href="#">Lupa Kata Sandi?</a>
+            </div>
+
+            <button type="submit" class="btn-primary">Sign In</button>
+
+            <p style="text-align:center; margin-top:15px; font-size:14px;">
+                Belum punya akun? <a href="#" onclick="showRegister(); return false;">Daftar</a>
+            </p>
+        </form>
+
+        <form class="register-form" onsubmit="return registerUser(event);">
+            <h3>Buat Akun Baru</h3>
+
+            <div class="input-group">
+                <i class="fas fa-signature"></i>
+                <input type="text" id="nama" placeholder="Nama Lengkap" required>
+            </div>
+
+            <div class="input-group">
+                <i class="fas fa-envelope"></i>
+                <input type="email" id="emailDaftar" placeholder="Email" required>
+            </div>
+
+            <div class="input-group">
+                <i class="fas fa-lock"></i>
+                <input type="password" id="passwordDaftar" placeholder="Password" required>
+            </div>
+
+            <label class="showpw"><input type="checkbox" id="toggleRegisterPw"> Tampilkan Password</label>
+
+            <button type="submit" class="btn-primary">Daftar</button>
+
+            <p style="text-align:center; margin-top:15px; font-size:14px;">
+                Sudah punya akun? <a href="#" onclick="showLogin(); return false;">Masuk</a>
+            </p>
+        </form>
+
+    </div>
+</div>
+
+<script>
+const themeToggle = document.getElementById('theme-toggle');
+const body = document.body;
+const DARK_MODE_CLASS = 'dark-mode';
+const STORAGE_KEY = 'themePreference';
+
+function toggleTheme() {
+    const isDarkMode = themeToggle.checked;
+    if (isDarkMode) {
+        body.classList.add(DARK_MODE_CLASS);
+        localStorage.setItem(STORAGE_KEY, 'dark');
+    } else {
+        body.classList.remove(DARK_MODE_CLASS);
+        localStorage.setItem(STORAGE_KEY, 'light');
+    }
+}
+function loadTheme() {
+    const savedTheme = localStorage.getItem(STORAGE_KEY);
+    if (savedTheme === 'dark') { body.classList.add(DARK_MODE_CLASS); themeToggle.checked = true; }
+    else if (savedTheme === 'light') { body.classList.remove(DARK_MODE_CLASS); themeToggle.checked = false; }
+    else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+         body.classList.add(DARK_MODE_CLASS); themeToggle.checked = true;
+    }
+}
+loadTheme();
+themeToggle.addEventListener('change', toggleTheme);
+
+function displayMessage(message, type='error'){
+    const box=document.getElementById('notification');
+    box.style.display='block';
+    box.textContent=message;
+    box.style.backgroundColor=(type==='success')?'#d4edda':'#fcebeb';
+    box.style.color=(type==='success')?'#155724':'#cc0000';
+    box.style.border=(type==='success')?'1px solid #155724':'1px solid #cc0000';
+}
+function hideMessage(){ document.getElementById('notification').style.display='none'; }
+
+function showRegister(){ hideMessage(); document.querySelector('.login-form').style.display='none'; document.querySelector('.register-form').style.display='block'; }
+function showLogin(){ hideMessage(); document.querySelector('.register-form').style.display='none'; document.querySelector('.login-form').style.display='block'; }
+
+function loadUsers(){
+    try{
+        let stored=JSON.parse(localStorage.getItem('dataPengguna'));
+        if(Array.isArray(stored)) return stored;
+    }catch(e){}
+    if(typeof dataPengguna!=='undefined' && Array.isArray(dataPengguna)) return dataPengguna.slice();
+    return [];
+}
+
+(function autoLogin(){
+    const saved=localStorage.getItem('rememberLogin');
+    if(saved){ localStorage.setItem('loggedUser', saved); }
+})();
+
+function loginUser(event){
+    event.preventDefault(); hideMessage();
+    let users=loadUsers();
+    const u=document.getElementById('penggunaLogin').value.trim().toLowerCase();
+    const p=document.getElementById('passwordLogin').value.trim();
+    let user=users.find(a=>((a.email||'').toLowerCase()===u||(a.nama||'').toLowerCase()===u)&&a.password===p);
+    if(!user){ displayMessage('Login gagal! Data tidak cocok.'); return false; }
+
+    displayMessage('Login berhasil!','success');
+
+    localStorage.setItem('isLoggedIn', 'true');
+    localStorage.setItem('loggedUser', JSON.stringify(user));
+    localStorage.setItem('dataPengguna', JSON.stringify(users));
+
+    if(document.querySelector('.extra input[type="checkbox"]').checked){
+        localStorage.setItem('rememberLogin', JSON.stringify(user));
+    } else {
+        localStorage.removeItem('rememberLogin');
+    }
+
+    setTimeout(()=>location.href='Dashboard.html',800);
+    return false;
+}
+
+function registerUser(event){
+    event.preventDefault(); hideMessage();
+    let users=loadUsers();
+    const nama=document.getElementById('nama').value.trim();
+    const email=document.getElementById('emailDaftar').value.trim().toLowerCase();
+    const pass=document.getElementById('passwordDaftar').value.trim();
+    if(users.some(a=>(a.email||'').toLowerCase()===email)){ displayMessage('Email sudah terdaftar!'); return false; }
+    if(pass.length<6){ displayMessage('Password minimal 6 karakter.'); return false; }
+    const newId=(users.reduce((m,x)=>Math.max(m,x.id||0),0)||0)+1;
+    users.push({id:newId,nama,email,password:pass});
+    localStorage.setItem('dataPengguna',JSON.stringify(users));
+    if (typeof dataPengguna !== 'undefined') { window.dataPengguna = users; }
+    displayMessage('Pendaftaran berhasil!','success');
+    setTimeout(showLogin,1200);
+    return false;
+}
+
+document.getElementById('toggleLoginPw').onchange=e=>{
+    const pwInput = document.getElementById('passwordLogin');
+    if (pwInput) pwInput.type=e.target.checked?'text':'password';
+};
+document.getElementById('toggleRegisterPw').onchange=e=>{
+    const pwInput = document.getElementById('passwordDaftar');
+    if (pwInput) pwInput.type=e.target.checked?'text':'password';
+};
+
+async function biometricLogin(){
+    try{
+        const cred = await navigator.credentials.get({ publicKey:{
+            challenge:new Uint8Array([1,2,3,4]),
+            allowCredentials:[],
+            timeout:60000,
+            userVerification:"required"
+        }});
+        const saved=localStorage.getItem('rememberLogin');
+        if(saved){
+            localStorage.setItem('loggedUser',saved);
+            location.href='E:/TugasAkhir/Dashboard.html';
+        } else { displayMessage('Tidak ada akun yang disimpan. Harap login dulu.'); }
+    }catch(err){
+        displayMessage('Fingerprint / Face ID gagal atau tidak tersedia.');
+    }
+}
+
+const container=document.querySelector('.login-form');
+if(container){
+    const btn=document.createElement('button');
+    btn.textContent="Login dengan Sidik Jari / Face ID";
+    btn.style.cssText="margin-top:10px;width:100%;padding:12px;border-radius:6px;border:none;background:#444;color:white;cursor:pointer;";
+    btn.onclick=biometricLogin;
+    container.appendChild(btn);
+}
+
+window.showLogin=showLogin; window.showRegister=showRegister;
+window.loginUser=loginUser; window.registerUser=registerUser;
+</script>
+
+</body>
+</html>

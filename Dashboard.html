@@ -1,0 +1,2374 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Dashboard Gudang Packing | NS WAREHOUSE</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config = { darkMode: 'class' }</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
+
+<style>
+
+#notifContainer {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 99999;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: none;
+}
+.notif-box {
+    padding: 12px 18px;
+    border-radius: 10px;
+    color: white (241, 242, 247);
+    font-size: 14px;
+    font-weight: 600;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    opacity: 0;
+    transform: translateX(50px);
+    animation: slideFadeIn 0.28s forwards;
+    transition: opacity 0.3s, transform 0.3s;
+    min-width: 250px;
+    pointer-events: auto;
+}
+.notif-success { background: #16a34a; }
+.notif-warning { background: #f59e0b; }
+.notif-error { background: #dc2626; }
+.notif-info { background: #2563eb; }
+@keyframes slideFadeIn { to { opacity: 1; transform: translateX(0);} }
+@keyframes slideFadeOut { from { opacity: 1; transform: translateX(0);} to { opacity: 0; transform: translateX(50px);} }
+
+:root{--red:#dc2626}
+*{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial}
+::-webkit-scrollbar{ width:8px }
+::-webkit-scrollbar-thumb{ background:rgba(150,150,150,0.35); border-radius:6px }
+.modal-bg{ background-color: rgba(0,0,0,0.45); }
+.table-fixed th, .table-fixed td { white-space: nowrap; }
+.no-gap { margin-bottom:0 !important; }
+</style>
+</head>
+<body class="font-Inter bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 flex h-screen overflow-hidden">
+
+<div id="notifContainer" aria-live="polite"></div>
+
+<aside id="sidebar" class="w-64 bg-white dark:bg-gray-800 shadow-lg flex flex-col justify-between transition-transform duration-300 transform -translate-x-full md:translate-x-0 absolute md:relative z-40">
+  <div>
+    <div class="px-6 py-5 border-b border-black-200 dark:border-black-700">
+      <h1 class="text-2xl font-bold text-violet-900">NS WAREHOUSE</h1>
+      <p class="text-sm font-bold text-black-900">Divisi Gudang Packing</p>
+    </div>
+    <nav class="mt-6 px-4">
+      <ul class="space-y-1">
+        <li><a href="Dashboard.html" id="menuGudang" class="w-full text-left block px-4 py-3 rounded-lg bg-violet-600 text-black">📦 Gudang Packing</a></li>
+        <li><a href="AdminGudang.html" id="menuAdmin" class="w-full text-left block px-4 py-3 rounded-lg hover:bg-violet-600 hover:text-white dark:hover:bg-black-700 dark:hover:text-white">🏢 Admin Gudang</a></li>
+        <li><a href="Laporan.html" id="menuLaporan" class="w-full text-left block px-4 py-3 rounded-lg hover:bg-violet-600 hover:text-white dark:hover:bg-black-700 dark:hover:text-white">📊 Laporan</a></li>
+        <li><a href="#" onclick="openResepModal()" class="w-full text-left block px-4 py-3 rounded-lg hover:bg-violet-600 hover:text-white dark:hover:bg-black-700 dark:hover:text-white">📝 Resep Bahan Baku</a></li>
+        </ul>
+      </ul>
+    </nav>
+  </div>
+  <div class="p-4 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400 space-y-2">
+    <button id="themeButton" onclick="toggleDarkMode()" class="w-full py-2 rounded-lg bg-red-600 text-white">🌙 Dark Mode</button>
+    <button onclick="logout()" class="w-full py-2 rounded-lg bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600">🚪 Logout</button>
+    <p class="mt-4 text-center text-[11px]">Created by <span class="text-red-600 font-semibold">The Anonymous Faisal</span></p>
+  </div>
+</aside>
+
+<div class="flex-1 flex flex-col overflow-auto p-6" id="mainContent">
+    <header class="flex items-center justify-between mb-4 gap-4">
+        <div class="flex items-center gap-3">
+            <button id="sidebarToggle" onclick="toggleSidebar()" class="p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 mr-2">☰</button>
+            <div>
+                <div class="flex items-center gap-3">
+                    <h2 class="text-2xl font-bold text-black-800">Divisi Gudang Packing</h2>
+                    <nav id="breadcrumb" class="text-sm text-black-500 dark:text-black-400 bg-black-50 dark:bg-black-800 px-3 py-1 rounded shadow-sm">Home &gt; Gudang &gt; Packing</nav>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+            <div class="relative">
+                <input id="topSearch" type="text" placeholder="Cari barang / supplier..." class="px-3 py-2 rounded-lg border border-black-300 w-64" oninput="renderWarehouseStock(this.value)">
+                <button onclick="searchFromTop()" class="absolute right-1 top-1/2 -translate-y-1/2 px-3 py-1 bg-violet-600 text-white rounded">Cari</button>
+            </div>
+
+            <button id="notifBtn" onclick="notify('Contoh notifikasi 10 detik.', 'info', 10000)" class="relative p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">🔔</button>
+            <button id="autoCorrectionBtn" onclick="toggleAutoCorrection()" class="px-3 py-2 bg-yellow-500 text-white rounded-lg">Auto Correction ON</button>
+            <button onclick="saveManual()" class="px-3 py-2 bg-blue-600 text-white rounded-lg">Save Manual</button>
+            <button onclick="exportHistoryCSV()" class="px-3 py-2 bg-green-500 dark:bg-green-800 text-white rounded-lg">Export CSV</button>
+            <button onclick="exportHistoryPDF()" class="px-3 py-2 bg-red-500 dark:bg-red-800 text-white rounded-lg">ExportPDF</button>
+        </div>
+    </header>
+
+  <div id="pages" class="flex-1 overflow-auto">
+    <section id="page-dashboard" class="space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+        <div class="col-span-1 grid grid-cols-2 gap-4">
+          <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-md">
+            <h4 class="font-semibold text-sm text-green-500">Total Stok Barang</h4>
+            <p id="totalStok" class="text-2xl font-bold text-red-600">0</p>
+            <p class="text-xs text-violet-400 mt-1">Semua stok (sistem)</p>
+          </div>
+          <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-md">
+            <h4 class="font-semibold text-sm text-red-500">Barang Hampir Habis</h4>
+            <p id="hampirHabis" class="text-2xl font-bold">0</p>
+            <p class="text-xs text-yellow-600 mt-1">≤ Batas minimal</p>
+          </div>
+          <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-md">
+            <h4 class="font-semibold text-sm text-gray-500">Total Pengadaan (Bulan ini)</h4>
+            <p id="totalPengadaan" class="text-2xl font-bold">0</p>
+            <p class="text-xs text-gray-400 mt-1">IN total bulan ini</p>
+          </div>
+          <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-md">
+            <h4 class="font-semibold text-sm text-gray-500">Barang Masuk / Keluar</h4>
+            <p id="masukKeluar" class="text-lg">-</p>
+            <p class="text-xs text-gray-400 mt-1">Top masuk / keluar</p>
+          </div>
+        </div>
+
+        <div class="col-span-2 bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-md">
+          <div class="flex justify-between items-start gap-4 mb-2">
+            <div>
+              <h3 class="text-xl font-semibold text-red-600">Sisa Stok</h3>
+            </div>
+            <div class="text-right text-xs text-gray-500">
+              <div>Auto Correction: <span id="autoStatus">ON</span></div>
+              <div>Threshold Kritis: <input id="threshInput" type="number" value="5" class="w-16 px-1 py-0.5 rounded border ml-1 inline-block text-sm dark:bg-gray-700 dark:border-gray-600" onchange="updateThreshold()" /></div>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 lg:grid-cols-6 gap-4 items-center">
+            <div class="col-span-6 lg:col-span-4">
+              <canvas id="stokChart" height="120"></canvas>
+            </div>
+            <div class="col-span-6 lg:col-span-2">
+              <div class="bg-gray-50 dark:bg-gray-900 p-3 rounded-lg">
+                <h4 class="text-sm font-medium text-black-600">Info Cepat</h4>
+                <ul class="text-sm mt-2 space-y-1 text-gray-700 dark:text-gray-300">
+                  <li>Total Item: <span id="totalItems">0</span></li>
+                  <li>Terakhir update: <span id="lastUpdate">-</span></li>
+                  <li>Staf Online: <span id="currentUserDisplay">Admin</span></li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="page-gudang" class="space-y-6">
+      <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-md mb-6">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="text-xl font-semibold text-black-600">📦 Gudang Packing</h3>
+          <div class="flex gap-2">
+            <button id="gudangUndoBtn" onclick="undo()" class="px-4 py-2 bg-red-600 text-white rounded-lg" disabled>Undo</button>
+            <button id="gudangRedoBtn" onclick="redo()" class="px-4 py-2 bg-green-600 text-white rounded-lg" disabled>Redo</button>
+            <button onclick="openModal('add')" class="px-4 py-2 bg-red-600 text-white rounded-lg">Tambah Stok</button>
+            <button onclick="openBulk()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg">Tambah IN/OUT</button>
+            <button onclick="performDayTransition()" class="px-3 py-1 bg-blue-600 text-white rounded">Transisi Hari</button>
+            <button onclick="clearAllData()" class="px-3 py-1 bg-red-200 rounded">Reset Data</button>
+            <button onclick="openDailyRecap()" class="px-3 py-1 bg-green-600 text-white rounded">Rekap Harian</button>
+            <button onclick="openWeeklyRecap()" class="px-3 py-1 bg-orange-600 text-white rounded">Rekap Mingguan</button>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table id="gudangTableMain" class="min-w-full table-auto border-collapse border border-gray-300 table-fixed">
+            <thead>
+              <tr class="bg-gray-200 dark:bg-gray-700 text-xs">
+                <th class="border px-2 py-2 text-left">Barang</th>
+                <th class="border px-2 py-2">Personil Packing</th>
+                <th class="border px-2 py-2">Orderan Reguler</th>
+                <th class="border px-2 py-2">Orderan Tambahan</th>
+                <th class="border px-2 py-2">IN</th>
+                <th class="border px-2 py-2">OUT</th>
+                <th class="border px-2 py-2">Sisa Kemarin</th>
+                <th class="border px-2 py-2">Sisa Data</th>
+                <th class="border px-2 py-2">Sisa Real</th>
+                <th class="border px-2 py-2">Rusak</th>
+                <th class="border px-2 py-2">Susut</th>
+                <th class="border px-2 py-2">Selisih</th>
+                <th class="border px-2 py-2">Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="gudangTable"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-md mb-8">
+        <div class="flex justify-between items-center mb-3">
+          <h3 class="text-xl font-semibold text-red-600">📝 History / Log Perubahan</h3>
+          <div class="flex gap-2">
+            <button id="undoHistoryBtn" onclick="undo()" class="px-3 py-1 bg-green-700 text-white rounded-lg" disabled>Undo</button>
+            <button id="redoHistoryBtn" onclick="redo()" class="px-3 py-1 bg-yellow-700 text-white rounded-lg" disabled>Redo</button>
+            <button onclick="exportHistoryCSV()" class="px-3 py-1 bg-green-700 rounded">Export CSV</button>
+            <button onclick="exportHistoryPDF()" class="px-3 py-1 bg-red-700 rounded">Export PDF</button>
+            <button onclick="clearHistory()" class="px-3 py-1 bg-black-700 rounded">Bersihkan History</button>
+          </div>
+        </div>
+
+        <div class="flex gap-2 mb-3">
+          <input id="filterBarang" placeholder="Filter Barang" class="px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600" />
+          <input id="filterUser" placeholder="Filter User" class="px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600" />
+          <input id="filterStart" type="date" class="px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600" />
+          <input id="filterEnd" type="date" class="px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600" />
+          <button onclick="filterHistory()" class="px-3 py-2 bg-indigo-600 text-white rounded-lg">Filter/Cari</button>
+          <button onclick="resetHistoryFilters()" class="px-3 py-2 bg-gray-300 rounded-lg">Reset</button>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="min-w-full table-auto border-collapse border border-gray-300">
+            <thead>
+              <tr class="bg-gray-200 dark:bg-gray-700">
+                <th class="border px-2 py-1">Waktu</th>
+                <th class="border px-2 py-1">User</th>
+                <th class="border px-2 py-1">Barang</th>
+                <th class="border px-2 py-1">Personil</th>
+                <th class="border px-2 py-1">Sisa Kemarin</th>
+                <th class="border px-2 py-1">OrderReguler</th>
+                <th class="border px-2 py-1">OrderTambahan</th>
+                <th class="border px-2 py-1">IN</th>
+                <th class="border px-2 py-1">OUT</th>
+                <th class="border px-2 py-1">Sisa Data</th>
+                <th class="border px-2 py-1">Real</th>
+                <th class="border px-2 py-1">Kurangan Besok</th>
+                <th class="border px-2 py-1">Rusak</th>
+                <th class="border px-2 py-1">Susut</th>
+              </tr>
+            </thead>
+            <tbody id="historyTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<div id="stokModal" class="fixed inset-0 hidden items-center justify-center modal-bg z-50">
+  <div class="bg-white dark:bg-gray-800 p-6 rounded-xl w-[95%] max-w-3xl">
+    <div class="flex justify-between items-center mb-3">
+      <h3 id="modalTitle" class="text-xl font-semibold">Tambah Stok</h3>
+      <div class="flex gap-2 items-center">
+        <label class="text-sm">User</label>
+        <input id="modalUser" class="px-2 py-1 border rounded dark:bg-gray-700 dark:border-gray-600" value="Admin" />
+      </div>
+    </div>
+
+<div class="max-h-[80vh] overflow-y-auto p-1 pr-3"> 
+  
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 p-3 bg-gray-50 dark:bg-gray-900 rounded-xl shadow-inner">
+
+    <div>
+      <label for="modalPersonil" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Personil Packing</label>
+      <input id="modalPersonil" placeholder="Personil" class="mt-1 w-full p-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+    </div>
+
+    <div>
+      <label for="modalSupplier" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Supplier</label>
+      <input id="modalSupplier" placeholder="Supplier" class="mt-1 w-full p-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+    </div>
+
+    <div>
+      <label for="modalBarang" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Nama Barang</label>
+      <input id="modalBarang" placeholder="Nama Barang" class="mt-1 w-full p-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+    </div>
+    
+    <div>
+      <label for="modalOrderReguler" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Orderan Reguler</label>
+      <input id="modalOrderReguler" type="number" value="0" min="0" placeholder="Order Reguler" class="mt-1 w-full p-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+    </div>
+    
+    <div>
+      <label for="modalOrderTambahan" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Orderan Tambahan</label>
+      <input id="modalOrderTambahan" type="number" value="0" min="0" placeholder="Order Tambahan" class="mt-1 w-full p-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+    </div>
+
+    <div>
+      <label for="modalSisaKemarin" class="block text-sm font-medium text-gray-700 dark:text-gray-300">SisaKemarin</label>
+      <input id="modalSisaKemarin" type="number" value="0" min="0" placeholder="SisaKemarin" class="mt-1 w-full p-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+    </div>
+
+    <div class="md:col-span-2 border p-3 rounded-lg bg-green-50 dark:bg-green-900/50">
+      <label class="block text-sm font-bold text-gray-700 dark:text-gray-200 mb-2">IN</label>
+      
+      <div id="inCols" class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+        </div>
+      
+      <div class="flex space-x-2">
+        <button onclick="addInCol()" class="flex-1 px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded transition">
+          + Tambah IN
+        </button>
+        <button onclick="removeInCol()" class="flex-1 px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded transition">
+          - Hapus IN
+        </button>
+      </div>
+    </div>
+
+    <div class="md:col-span-2 border p-3 rounded-lg bg-red-50 dark:bg-red-900/50">
+      <label class="block text-sm font-bold text-gray-700 dark:text-gray-200 mb-2">OUT</label>
+      
+      <div id="outCols" class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+        </div>
+      
+      <div class="flex space-x-2">
+        <button onclick="addOutCol()" class="flex-1 px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded transition">
+          + Tambah OUT
+        </button>
+        <button onclick="removeOutCol()" class="flex-1 px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded transition">
+          - Hapus OUT
+        </button>
+      </div>
+    </div>
+
+    <div>
+      <label for="modalSisaData" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Sisa Data</label>
+      <input id="modalSisaData" type="number" placeholder="Sisa Data" class="mt-1 w-full p-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+    </div>
+
+    <div>
+      <label for="modalReal" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Sisa Real</label>
+      <input id="modalReal" type="number" placeholder="Sisa Real" class="mt-1 w-full p-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+    </div>
+
+    <div>
+        <label for="modalKekuranganBesok" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Kekurangan Besok</label>
+        <input id="modalKekuranganBesok" type="number" value="0" min="0" placeholder="Kekurangan" class="mt-1 w-full p-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"/>
+    </div>
+    
+    <div>
+      <label for="modalRusak" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Rusak</label>
+      <input id="modalRusak" type="number" value="0" min="0" placeholder="Rusak" class="mt-1 w-full p-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+    </div>
+    
+    <div>
+      <label for="modalSusut" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Susut</label>
+      <input id="modalSusut" type="number" value="0" min="0" placeholder="Susut" class="mt-1 w-full p-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"/>
+    </div>
+    
+    <div class="hidden md:block"></div> 
+    
+  </div>
+</div>
+
+    <div class="flex justify-end gap-2 mt-4">
+      <button onclick="cancelStokModal()" class="px-4 py-2 bg-gray-300 dark:bg-gray-700 dark:text-white rounded-lg">Batal</button>
+      <button onclick="confirmSaveStokWithCheck()" id="confirmSaveBtn" class="px-4 py-2 bg-red-600 text-white rounded-lg">Konfirmasi & Simpan</button>
+    </div>
+  </div>
+</div>
+
+
+<div id="resepModal" class="fixed inset-0 hidden items-center justify-center modal-bg z-50">
+    <div class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-xl w-[95%] max-w-5xl relative">
+        <button onclick="closeResepModal()" class="absolute top-4 right-4 text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white">&times;</button>
+        
+        <h2 class="text-2xl font-bold text-gray-800 dark:text-white mb-6 border-b pb-2">📋 Resep & Kebutuhan Bahan Baku</h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+            <div>
+                <label for="namaProduk" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Produk Hasil (Finished Good)</label>
+                <input type="text" id="namaProduk" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm p-2.5" placeholder="Nama Produk Jadi">
+            </div>
+            <div>
+                <label for="kuantitasProduksi" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Kuantitas Produksi</label>
+                <input type="number" id="kuantitasProduksi" class="mt-1 block w-full rounded-lg border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm p-2.5" value="1" min="1">
+            </div>
+        </div>
+
+        
+        <h3 class="text-xl font-semibold text-gray-800 dark:text-white mb-4">Daftar Bahan Baku</h3>
+        
+        <div class="overflow-x-auto rounded-xl border dark:border-gray-700">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead class="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-5/12">Bahan Baku</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-3/12">Jumlah Dibutuhkan</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-2/12">Satuan</th>
+                        <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-2/12">Aksi</th>
+                    </tr>
+                </thead>
+                <tbody id="bahanBakuList" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                    </tbody>
+            </table>
+        </div>
+        
+        <button onclick="tambahBahanBaku()" class="mt-4 flex items-center px-4 py-2 bg-red-600 text-white font-semibold rounded-lg shadow-md hover:bg-red-700 transition duration-150">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" /></svg>
+            Tambah Bahan Baku
+        </button>
+        
+        <div class="mt-8 pt-4 border-t dark:border-gray-700 flex justify-end gap-3">
+            <button onclick="closeResepModal()" class="px-6 py-3 bg-gray-300 rounded-lg font-bold hover:bg-gray-400 transition duration-150 dark:bg-gray-700 dark:text-white">Batal</button>
+            <button id="simpanResepBtn" type="button" class="px-6 py-3 bg-green-600 text-white font-bold rounded-lg shadow-lg hover:bg-green-700 transition duration-150">
+                💾 Simpan Resep
+            </button>
+        </div>
+    </div>
+</div>
+
+<div id="bulkModal" class="fixed inset-0 hidden items-center justify-center modal-bg z-50">
+  <div class="bg-white dark:bg-gray-800 p-6 rounded-xl w-[90%] max-w-4xl">
+    <div class="flex justify-between items-center mb-3">
+      <h3 class="text-xl font-semibold">Bulk IN / OUT</h3>
+      <button onclick="closeBulk()" class="px-3 py-1 bg-gray-300 rounded-lg dark:bg-gray-700 dark:text-white">&times;</button>
+    </div>
+    <p class="text-sm text-gray-500 mb-4">Masukkan data dalam format: [Barang], [Supplier], [IN (Total)], [OUT (Total)], [Rusak], [Susut], [Sisa Real] per baris. Item yang tidak ada akan ditambahkan baru.</p>
+    <div class="flex gap-2 items-center mb-3">
+        <label class="text-sm">User</label>
+        <input id="bulkUser" class="px-2 py-1 border rounded dark:bg-gray-700 dark:border-gray-600" value="Admin" />
+    </div>
+    <textarea id="bulkData" rows="10" placeholder="Contoh:&#10;Bawang merah sedang 5kg, PT A, 100, 5, 0, 0, 95&#10;Kardus Besar F, PT B, 50, 0, 1, 0, 49" class="w-full p-3 border rounded-lg dark:bg-gray-700 dark:border-gray-600"></textarea>
+    <div class="flex justify-end gap-2 mt-4">
+      <button onclick="closeBulk()" class="px-4 py-2 bg-gray-300 dark:bg-gray-700 dark:text-white rounded-lg">Batal</button>
+      <button onclick="processBulkData()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg">Proses Bulk Data</button>
+    </div>
+  </div>
+</div>
+
+<div id="recapModal" class="fixed inset-0 hidden items-center justify-center modal-bg z-50">
+    <div class="bg-white dark:bg-gray-800 p-6 rounded-xl w-[95%] max-w-4xl max-h-[90vh] flex flex-col">
+        <div class="flex justify-between items-center mb-3 flex-shrink-0">
+            <h3 id="recapModalTitle" class="text-xl font-semibold">Rekap Harian</h3>
+            <button onclick="document.getElementById('recapModal').classList.add('hidden')" class="px-3 py-1 bg-gray-300 rounded-lg dark:bg-gray-700 dark:text-white">&times;</button>
+        </div>
+        
+        <div class="overflow-x-auto overflow-y-auto flex-1 max-h-[60vh]">
+            <table class="min-w-full table-auto border-collapse border border-gray-300">
+                <thead class="bg-gray-200 dark:bg-gray-700 sticky top-0" id="recapTableHeader">
+                </thead>
+                <tbody id="recapTableBody">
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="flex justify-end gap-2 mt-4 flex-shrink-0">
+            <button id="recapEditBtn" onclick="editRecap()" class="px-4 py-2 bg-yellow-500 text-white rounded-lg">Edit</button>
+            <button id="recapSaveBtn" onclick="saveRecap()" class="px-4 py-2 bg-green-600 text-white rounded-lg hidden">Konfirmasi/Simpan</button>
+            <button onclick="exportRecapPDF()" class="px-4 py-2 bg-red-600 text-white rounded-lg">Export PDF</button>
+            <button id="recapExportBtn" class="px-4 py-2 bg-gray-500 text-white rounded-lg">Export CSV</button>
+            <button onclick="document.getElementById('recapModal').classList.add('hidden')" class="px-4 py-2 bg-gray-300 dark:bg-gray-700 dark:text-white rounded-lg">Tutup</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const STORAGE_GUDANG_KEY = 'gudangData';
+    const STORAGE_HISTORY_KEY = 'dailyLog';
+    const STORAGE_UNDO_KEY = 'undoStack';
+    const STORAGE_REDO_KEY = 'redoStack';
+    const SNAPSHOT_LIMIT = 50;
+    
+    const defaultGudangData = [
+  { barang: 'Bawang merah sedang 5kg', kategori: 'Bumbu Basah', namaBarang: 'Bawang Merah', satuan: 'kg', qtyPerUnit: 5, personil: '', orderReguler: 0, orderTambahan: 0, stokKurangBesok: 0 },
+  { barang: 'Bawang merah kecil 1kg', kategori: 'Bumbu Basah', namaBarang: 'Bawang Merah', satuan: 'kg', qtyPerUnit: 1, personil: '', orderReguler: 0, orderTambahan: 0, stokKurangBesok: 0 },
+  { barang: 'Bawang putih besar 20kg', kategori: 'Bumbu Basah', namaBarang: 'Bawang Putih', satuan: 'kg', qtyPerUnit: 20, personil: '', orderReguler: 0, orderTambahan: 0, stokKurangBesok: 0 },
+  { barang: 'Bawang putih sedang 5kg', kategori: 'Bumbu Basah', namaBarang: 'Bawang Putih', satuan: 'kg', qtyPerUnit: 5, personil: '', orderReguler: 0, orderTambahan: 0, stokKurangBesok: 0 },
+  { barang: 'Bawang putih kecil 1kg', kategori: 'Bumbu Basah', namaBarang: 'Bawang Putih', satuan: 'kg', qtyPerUnit: 1, personil: '', orderReguler: 0, orderTambahan: 0, stokKurangBesok: 0 },
+  { barang: 'Mrica 100gram', kategori: 'Rempah', namaBarang: 'Mrica', satuan: 'gram', qtyPerUnit: 100, personil: '', orderReguler: 0, orderTambahan: 0, stokKurangBesok: 0 },
+  { barang: 'Ketumbar 100gram', kategori: 'Rempah', namaBarang: 'Ketumbar', satuan: 'gram', qtyPerUnit: 100, personil: '', orderReguler: 0, orderTambahan: 0, stokKurangBesok: 0 },
+  { barang: 'Jahe 1kg', kategori: 'Bumbu Basah', namaBarang: 'Jahe', satuan: 'kg', qtyPerUnit: 1, personil: '', orderReguler: 0, orderTambahan: 0, stokKurangBesok: 0 },
+  { barang: 'Pete', kategori: 'Sayuran', namaBarang: 'Pete', satuan: 'keris', qtyPerUnit: 1, personil: '', orderReguler: 0, orderTambahan: 0, stokKurangBesok: 0 },
+  { barang: 'Gula Pasir besar 50kg', kategori: 'Sembako', namaBarang: 'Gula Pasir', satuan: 'sak', qtyPerUnit: 50, personil: '', orderReguler: 0, orderTambahan: 0, stokKurangBesok: 0 },
+  { barang: 'Gula Pasir sedang 10kg', kategori: 'Sembako', namaBarang: 'Gula Pasir', satuan: 'kg', qtyPerUnit: 10, personil: '', orderReguler: 0, orderTambahan: 0, stokKurangBesok: 0 },
+  { barang: 'Gula Pasir sedang 5kg', kategori: 'Sembako', namaBarang: 'Gula Pasir', satuan: 'kg', qtyPerUnit: 5, personil: '', orderReguler: 0, orderTambahan: 0, stokKurangBesok: 0 },
+  { barang: 'Serbuk teh kecil', kategori: 'Minuman', namaBarang: 'Serbuk Teh', satuan: 'pack', qtyPerUnit: 250, personil: '', orderReguler: 0, orderTambahan: 0, stokKurangBesok: 0 },
+  { barang: 'Beras C4', kategori: 'Beras', namaBarang: 'Beras C4', satuan: 'karung', qtyPerUnit: 25, personil: '', orderReguler: 0, orderTambahan: 0, stokKurangBesok: 0 },
+  { barang: 'Beras Mentik', kategori: 'Beras', namaBarang: 'Beras Mentik', satuan: 'karung', qtyPerUnit: 25, personil: '', orderReguler: 0, orderTambahan: 0, stokKurangBesok: 0 },
+  { barang: 'Beras Rojolele', kategori: 'Beras', namaBarang: 'Beras Rojolele', satuan: 'karung', qtyPerUnit: 25, personil: '', orderReguler: 0, orderTambahan: 0, stokKurangBesok: 0 },
+  { barang: 'Beras Mix besar 24kg', kategori: 'Beras', namaBarang: 'Beras Mix', satuan: 'karung', qtyPerUnit: 24, personil: '', orderReguler: 0, orderTambahan: 0, stokKurangBesok: 0 },
+
+  // --- TAMBAHAN RESTORAN MEWAH (PREMIUM PROTEIN & SEAFOOD) ---
+  { barang: 'Wagyu Beef MB 9+ Tomahawk', kategori: 'Meat', namaBarang: 'Wagyu Beef', satuan: 'kg', qtyPerUnit: 1.5, personil: '', orderReguler: 0, orderTambahan: 0, stokKurangBesok: 0 },
+  { barang: 'Salmon Fillet Norwegian', kategori: 'Seafood', namaBarang: 'Salmon', satuan: 'kg', qtyPerUnit: 2, personil: '', orderReguler: 0, orderTambahan: 0, stokKurangBesok: 0 },
+  { barang: 'Lobster Air Tawar Live', kategori: 'Seafood', namaBarang: 'Lobster', satuan: 'kg', qtyPerUnit: 1, personil: '', orderReguler: 0, orderTambahan: 0, stokKurangBesok: 0 },
+  { barang: 'Foie Gras Whole Duck', kategori: 'Premium', namaBarang: 'Foie Gras', satuan: 'kg', qtyPerUnit: 0.5, personil: '', orderReguler: 0, orderTambahan: 0, stokKurangBesok: 0 },
+
+  // --- TAMBAHAN CAFE METROPOLITAN (COFFEE & DAIRY) ---
+  { barang: 'Biji Kopi Arabica Ethiopia', kategori: 'Coffee', namaBarang: 'Kopi Arabica', satuan: 'pack', qtyPerUnit: 1, personil: '', orderReguler: 0, orderTambahan: 0, stokKurangBesok: 0 },
+  { barang: 'Oat Milk Barista 1L', kategori: 'Dairy', namaBarang: 'Oat Milk', satuan: 'karton', qtyPerUnit: 12, personil: '', orderReguler: 0, orderTambahan: 0, stokKurangBesok: 0 },
+  { barang: 'Syrup Artisan Elderflower', kategori: 'Beverage', namaBarang: 'Syrup', satuan: 'botol', qtyPerUnit: 1, personil: '', orderReguler: 0, orderTambahan: 0, stokKurangBesok: 0 },
+  { barang: 'Frozen Croissant Butter', kategori: 'Pastry', namaBarang: 'Croissant', satuan: 'box', qtyPerUnit: 50, personil: '', orderReguler: 0, orderTambahan: 0, stokKurangBesok: 0 },
+
+  // --- TAMBAHAN BAHAN LUXURY & PRODUCE ---
+  { barang: 'Truffle Oil Premium', kategori: 'Condiment', namaBarang: 'Truffle Oil', satuan: 'botol', qtyPerUnit: 1, personil: '', orderReguler: 0, orderTambahan: 0, stokKurangBesok: 0 },
+  { barang: 'Saffron Persian Grade 1', kategori: 'Condiment', namaBarang: 'Saffron', satuan: 'gram', qtyPerUnit: 10, personil: '', orderReguler: 0, orderTambahan: 0, stokKurangBesok: 0 },
+  { barang: 'Edible Flowers Mix', kategori: 'Fresh', namaBarang: 'Edible Flowers', satuan: 'box', qtyPerUnit: 0.1, personil: '', orderReguler: 0, orderTambahan: 0, stokKurangBesok: 0 },
+  { barang: 'Burrata Cheese Fresh', kategori: 'Dairy', namaBarang: 'Burrata', satuan: 'pcs', qtyPerUnit: 1, personil: '', orderReguler: 0, orderTambahan: 0, stokKurangBesok: 0 },
+
+  // --- TAMBAHAN OPERASIONAL (PACKAGING & CHEMICAL) ---
+  { barang: 'Paper Bag Luxury Large', kategori: 'Packaging', namaBarang: 'Paper Bag', satuan: 'pack', qtyPerUnit: 100, personil: '', orderReguler: 0, orderTambahan: 0, stokKurangBesok: 0 },
+  { barang: 'Dishwasher Liquid Industrial', kategori: 'Chemical', namaBarang: 'Sabun Dishwash', satuan: 'pail', qtyPerUnit: 20, personil: '', orderReguler: 0, orderTambahan: 0, stokKurangBesok: 0 },
+  { barang: 'Sanitizer Surface 5L', kategori: 'Chemical', namaBarang: 'Sanitizer', satuan: 'jerigen', qtyPerUnit: 5, personil: '', orderReguler: 0, orderTambahan: 0, stokKurangBesok: 0 }
+];
+
+    let gudangData;
+    let historyLog;
+    let undoStack;
+    let redoStack;
+    let autoCorrection = (localStorage.getItem('autoCorrection') !== 'false');
+    let thresholdKritis = Number(localStorage.getItem('stokThreshold') || 5);
+
+    function escapeHtml(text){
+        return text.toString().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+
+    function sumArray(arr){
+      
+        return arr.reduce((a, b) => a + Number(b || 0), 0);
+    }
+
+    function mergeCols(cols1, cols2) {
+      const maxLength = Math.max(cols1.length, cols2.length);
+      const merged = [];
+      for (let i = 0; i < maxLength; i++) {
+        merged.push((cols1[i] || 0) + (cols2[i] || 0));
+      }
+      return merged;
+    }
+
+    function notify(message, type = 'info', duration = 3000) {
+        const container = document.getElementById('notifContainer');
+        const box = document.createElement('div');
+        box.className = `notif-box notif-${type}`;
+        box.textContent = message;
+        container.appendChild(box);
+
+        setTimeout(() => {
+            box.style.animation = 'slideFadeOut 0.28s forwards';
+            setTimeout(() => box.remove(), 300);
+        }, duration);
+    }
+
+    function toggleSidebar() {
+        const sidebar = document.getElementById('sidebar');
+        sidebar.classList.toggle('-translate-x-full');
+    }
+
+    function toggleDarkMode() {
+        document.documentElement.classList.toggle('dark');
+        const isDark = document.documentElement.classList.contains('dark');
+        localStorage.setItem('darkMode', isDark ? 'enabled' : 'disabled');
+        document.getElementById('themeButton').textContent = isDark ? '☀️ Light Mode' : '🌙 Dark Mode';
+    }
+
+    function logout() {
+      if (confirm('Anda yakin ingin Logout?')) {
+        localStorage.removeItem('currentUser');
+        notify('Berhasil Logout.', 'info');
+        window.location.href = 'Login.html.html';
+      }
+    }
+
+
+    function loadAndMergeData() {
+      const stored = localStorage.getItem(STORAGE_GUDANG_KEY);
+      const storedArray = stored ? JSON.parse(stored) : [];
+      const mergedData = [];
+
+      defaultGudangData.forEach(defaultItem => {
+        const storedItem = storedArray.find(item => item.barang === defaultItem.barang);
+        const baseItem = storedItem || defaultItem;
+
+        mergedData.push({
+          ...defaultItem,
+          ...baseItem, 
+          stokKemarin: Number(baseItem.stokKemarin || 0),
+          inCols: baseItem.inCols || [],
+          outCols: baseItem.outCols || [],
+          stokData: Number(baseItem.stok || 0),
+          stokReal: Number(baseItem.stokReal || 0),
+          rusak: Number(baseItem.rusak || 0),
+          susut: Number(baseItem.susut || 0),
+          personil: baseItem.personil || '', // Tambah Personil
+          orderReguler: Number(baseItem.orderReguler || 0), // Tambah Order Reguler
+          orderTambahan: Number(baseItem.orderTambahan || 0), // Tambah Order Tambahan
+          stokKurangBesok: Number(baseItem.stokKurangBesok || 0), // Tambah Kekurangan Besok
+        });
+      });
+
+      storedArray.forEach(item => {
+        if (!defaultGudangData.some(defaultItem => defaultItem.barang === item.barang)) {
+          mergedData.push({
+            ...item,
+            stokKemarin: Number(item.stokKemarin || 0),
+            inCols: item.inCols || [],
+            outCols: item.outCols || [],
+            stokData: Number(item.stok || 0),
+            stokReal: Number(item.stokReal || 0),
+            rusak: Number(item.rusak || 0),
+            susut: Number(item.susut || 0),
+            personil: item.personil || '',
+            orderReguler: Number(item.orderReguler || 0),
+            orderTambahan: Number(item.orderTambahan || 0),
+            stokKurangBesok: Number(item.stokKurangBesok || 0),
+          });
+        }
+      });
+      return mergedData;
+    }
+
+    function loadHistory() {
+        const stored = localStorage.getItem(STORAGE_HISTORY_KEY);
+        return stored ? JSON.parse(stored) : [];
+    }
+
+    function saveLocal(){
+        localStorage.setItem(STORAGE_GUDANG_KEY, JSON.stringify(gudangData));
+        localStorage.setItem(STORAGE_HISTORY_KEY, JSON.stringify(historyLog));
+    }
+
+    function persistAll(action = 'Perubahan Data') {
+        pushSnapshot(action);
+        saveLocal();
+        renderTable();
+        renderHistory();
+        renderDashboardStats();
+    }
+    
+    function logHistory(data) {
+        // data harus berisi { barang, supplier, user, personil, stokKemarin, orderReguler, orderTambahan, in: [], out: [], stokData, stokReal, stokKurangBesok, rusak, susut }
+        const logEntry = { time: new Date().toISOString(), ...data };
+        historyLog.push(logEntry);
+        if (historyLog.length > 500) { // Batasi history log
+            historyLog.shift();
+        }
+    }
+
+    function loadStack(key) {
+        const stored = localStorage.getItem(key);
+        return stored ? JSON.parse(stored) : [];
+    }
+
+    function saveStack(key, stack) {
+        localStorage.setItem(key, JSON.stringify(stack));
+        if (key === STORAGE_UNDO_KEY) undoStack = stack;
+        if (key === STORAGE_REDO_KEY) redoStack = stack;
+    }
+
+    function applySnapshot(snapshot) {
+        gudangData = snapshot.gudang.map(d => ({ 
+            ...d, 
+            inCols: [...(d.inCols || [])], 
+            outCols: [...(d.outCols || [])],
+            // Pastikan properti baru ada
+            personil: d.personil || '',
+            orderReguler: Number(d.orderReguler || 0),
+            orderTambahan: Number(d.orderTambahan || 0),
+            stokKurangBesok: Number(d.stokKurangBesok || 0),
+        }));
+        historyLog = snapshot.history.slice();
+        saveLocal();
+        renderTable();
+        renderHistory();
+        renderDashboardStats();
+        updateUndoRedoButtonStates();
+        if (typeof notify === "function") {
+            notify(`State dikembalikan: ${snapshot.action}`, 'info', 1500);
+        }
+    }
+
+    function pushSnapshot(action = 'Perubahan Data') {
+        const snapshot = {
+            // Mapping untuk memastikan data IN/OUT disalin sebagai array baru
+            gudang: gudangData.map(d => ({ 
+                ...d, 
+                inCols: [...(d.inCols || [])], 
+                outCols: [...(d.outCols || [])] 
+            })),
+            history: historyLog.slice(),
+            action: action,
+            timestamp: new Date().toISOString()
+        };
+        // 1. Hapus SEMUA state di redoStack (perubahan baru membatalkan Redo)
+        redoStack = []; 
+        // 2. Tambahkan ke undoStack
+        undoStack.push(snapshot);
+        if (undoStack.length > SNAPSHOT_LIMIT) {
+            undoStack.shift();
+        }
+        // 3. Simpan ke Local Storage
+        saveStack(STORAGE_UNDO_KEY, undoStack);
+        saveStack(STORAGE_REDO_KEY, redoStack);
+        updateUndoRedoButtonStates();
+    }
+
+    function updateUndoRedoButtonStates() {
+        const undoBtn = document.getElementById('gudangUndoBtn');
+        const redoBtn = document.getElementById('gudangRedoBtn');
+        const undoHistoryBtn = document.getElementById('undoHistoryBtn');
+        const redoHistoryBtn = document.getElementById('redoHistoryBtn');
+        
+        // Disable tombol jika stack kosong atau hanya berisi 1 (initial state)
+        if (undoBtn) undoBtn.disabled = undoStack.length <= 1; 
+        if (redoBtn) redoBtn.disabled = redoStack.length === 0;
+        if (undoHistoryBtn) undoHistoryBtn.disabled = undoStack.length <= 1;
+        if (redoHistoryBtn) redoHistoryBtn.disabled = redoStack.length === 0;
+    }
+
+    function undo() {
+        if (undoStack.length <= 1) return; 
+
+        const currentState = undoStack.pop();
+        redoStack.push(currentState);
+
+        const previousState = undoStack[undoStack.length - 1];
+        if (previousState) {
+            applySnapshot(previousState);
+        } else {
+            // Ini seharusnya state awal, tidak perlu apply ulang
+        }
+        saveStack(STORAGE_UNDO_KEY, undoStack);
+        saveStack(STORAGE_REDO_KEY, redoStack);
+    }
+
+    function redo() {
+        if (redoStack.length === 0) return; 
+
+        const nextState = redoStack.pop();
+        undoStack.push(nextState);
+        
+        applySnapshot(nextState);
+
+        saveStack(STORAGE_UNDO_KEY, undoStack);
+        saveStack(STORAGE_REDO_KEY, redoStack);
+    }
+
+    function saveManual() {
+        // Melakukan perhitungan ulang sebelum push snapshot
+        gudangData.forEach(item => {
+            const totalIn = sumArray(item.inCols);
+            const totalOut = sumArray(item.outCols);
+            item.stokData = item.stokKemarin + totalIn - totalOut - (item.rusak || 0) - (item.susut || 0) - (item.stokKurangBesok || 0);
+        });
+        persistAll('Save Manual');
+        notify('Data berhasil disimpan secara manual.', 'success', 2000);
+    }
+
+    // --- Main Table Rendering ---
+    
+    function renderTable(filter = '') {
+        const tableBody = document.getElementById('gudangTable');
+        if (!tableBody) return;
+        tableBody.innerHTML = '';
+
+        const filterLower = filter.toLowerCase();
+        const filteredData = gudangData.filter(item => 
+            item.barang.toLowerCase().includes(filterLower) || 
+            (item.supplier || '').toLowerCase().includes(filterLower)
+        );
+
+        // Auto Correction Logic
+        if (autoCorrection) {
+            filteredData.forEach(item => {
+                const totalIn = sumArray(item.inCols);
+                const totalOut = sumArray(item.outCols);
+                // Hitung sisa data, termasuk rusak, susut, dan kekurangan besok
+                const sisaData = item.stokKemarin + totalIn - totalOut - (item.rusak || 0) - (item.susut || 0) - (item.stokKurangBesok || 0);
+                
+                // Jika Sisa Data (sistem) berbeda dengan Sisa Real, update Sisa Data
+                if (sisaData !== item.stokReal) {
+                    item.stokData = item.stokReal;
+                } else {
+                    item.stokData = sisaData;
+                }
+            });
+        }
+
+
+        filteredData.forEach((item, index) => {
+            const totalIn = sumArray(item.inCols);
+            const totalOut = sumArray(item.outCols);
+
+            // Perhitungan Stok Data (Sistem)
+            const sisaData = item.stokKemarin + totalIn - totalOut - (item.rusak || 0) - (item.susut || 0) - (item.stokKurangBesok || 0);
+            item.stokData = sisaData; // Update item.stok (stok sistem) untuk akurasi
+
+            const selisih = (item.stokReal || 0) - sisaData;
+            const selisihClass = selisih !== 0 ? (selisih < 0 ? 'bg-red-200 text-red-800 font-bold' : 'bg-yellow-200 text-yellow-800 font-bold') : 'text-gray-600';
+
+            const row = tableBody.insertRow();
+            row.className = sisaData <= thresholdKritis ? (sisaData > 0 ? 'bg-yellow-100 dark:bg-yellow-900/40' : 'bg-red-100 dark:bg-red-900/40') : 'hover:bg-gray-50 dark:hover:bg-gray-700';
+            
+            row.innerHTML = `
+                <td class="border px-2 py-2 text-left text-sm font-medium">${escapeHtml(item.barang)} <div class="text-xs text-gray-500">${escapeHtml(item.supplier || '-')}</div></td>
+                <td class="border px-2 py-2 text-center text-sm">${escapeHtml(item.personil || '-')}</td>
+                <td class="border px-2 py-2 text-center text-sm">${item.orderReguler}</td>
+                <td class="border px-2 py-2 text-center text-sm">${item.orderTambahan}</td>
+                <td class="border px-2 py-2 text-center">
+                    ${item.inCols.map((val, i) => `<input type="number" data-type="in" data-index="${index}" data-col="${i}" value="${val}" class="w-16 text-center text-sm border rounded p-1 my-0.5 no-gap dark:bg-gray-700" onchange="updateQuickAdd(this)">`).join('')}
+                    <button onclick="quickAddCol('${index}', 'in')" class="text-green-600 text-sm ml-1">+</button>
+                </td>
+                <td class="border px-2 py-2 text-center">
+                    ${item.outCols.map((val, i) => `<input type="number" data-type="out" data-index="${index}" data-col="${i}" value="${val}" class="w-16 text-center text-sm border rounded p-1 my-0.5 no-gap dark:bg-gray-700" onchange="updateQuickAdd(this)">`).join('')}
+                    <button onclick="quickAddCol('${index}', 'out')" class="text-red-600 text-sm ml-1">+</button>
+                </td>
+                <td class="border px-2 py-2 text-center text-gray-500 text-sm">${item.stokKemarin}</td>
+                <td class="border px-2 py-2 text-center font-bold text-blue-600">${sisaData}</td>
+                <td class="border px-2 py-2 text-center">
+                    <input type="number" data-type="stokReal" data-index="${index}" value="${item.stokReal}" class="w-16 text-center text-sm border rounded p-1 no-gap dark:bg-gray-700" onchange="updateQuickAdd(this)">
+                </td>
+                <td class="border px-2 py-2 text-center">
+                    <input type="number" data-type="rusak" data-index="${index}" value="${item.rusak}" class="w-16 text-center text-sm border rounded p-1 no-gap dark:bg-gray-700" onchange="updateQuickAdd(this)">
+                </td>
+                <td class="border px-2 py-2 text-center">
+                    <input type="number" data-type="susut" data-index="${index}" value="${item.susut}" class="w-16 text-center text-sm border rounded p-1 no-gap dark:bg-gray-700" onchange="updateQuickAdd(this)">
+                </td>
+                <td class="border px-2 py-2 text-center ${selisihClass}">${selisih}</td>
+                <td class="border px-2 py-2 text-center space-x-1">
+                    <button onclick="openModal('edit', ${index})" class="text-sm bg-blue-500 text-white px-2 py-1 rounded">Edit</button>
+                    <button onclick="deleteItem(${index})" class="text-sm bg-red-500 text-white px-2 py-1 rounded">Hapus</button>
+                </td>
+            `;
+        });
+    }
+
+    function searchFromTop() {
+        const filter = document.getElementById('topSearch').value;
+        renderTable(filter);
+    }
+    
+    function updateQuickAdd(input) {
+        const index = Number(input.getAttribute('data-index'));
+        const type = input.getAttribute('data-type');
+        const col = input.getAttribute('data-col');
+        let value = Number(input.value) || 0; // Pastikan nilai adalah angka
+
+        const item = gudangData[index];
+        if (!item) return;
+
+        pushSnapshot(`Quick Edit: ${item.barang}`);
+
+        if (type === 'in' || type === 'out') {
+            const colIndex = Number(col);
+            if (type === 'in') {
+                item.inCols[colIndex] = value;
+            } else {
+                item.outCols[colIndex] = value;
+            }
+        } else if (type === 'stokReal') {
+            item.stokReal = value;
+        } else if (type === 'rusak') {
+            item.rusak = value;
+        } else if (type === 'susut') {
+            item.susut = value;
+        }
+
+        persistAll(`Quick Edit ${type}: ${item.barang}`);
+    }
+
+    function quickAddCol(index, type) {
+        const item = gudangData[Number(index)];
+        if (!item) return;
+
+        pushSnapshot(`Tambah Kolom ${type.toUpperCase()}: ${item.barang}`);
+        if (type === 'in') {
+            item.inCols.push(0);
+        } else if (type === 'out') {
+            item.outCols.push(0);
+        }
+        persistAll();
+        notify(`Kolom ${type.toUpperCase()} baru ditambahkan pada ${item.barang}.`, 'info', 2000);
+    }
+
+    function deleteItem(index) {
+        if (confirm(`Anda yakin ingin menghapus barang "${gudangData[index].barang}" dari daftar? (Tidak akan menghapus dari history log)`)) {
+            pushSnapshot(`Hapus Item: ${gudangData[index].barang}`);
+            gudangData.splice(index, 1);
+            persistAll();
+            notify('Barang berhasil dihapus.', 'error', 2000);
+        }
+    }
+
+    function toggleAutoCorrection() {
+        autoCorrection = !autoCorrection;
+        localStorage.setItem('autoCorrection', autoCorrection);
+        const btn = document.getElementById('autoCorrectionBtn');
+        btn.classList.toggle('bg-yellow-500', autoCorrection);
+        btn.classList.toggle('bg-gray-500', !autoCorrection);
+        btn.textContent = autoCorrection ? 'Auto Correction ON' : 'Auto Correction OFF';
+        document.getElementById('autoStatus').textContent = autoCorrection ? 'ON' : 'OFF';
+        persistAll('Toggle Auto Correction');
+        notify(`Auto Correction: ${autoCorrection ? 'AKTIF' : 'NON-AKTIF'}`, autoCorrection ? 'success' : 'warning', 2000);
+    }
+
+    function updateThreshold() {
+        thresholdKritis = Number(document.getElementById('threshInput').value) || 0;
+        localStorage.setItem('stokThreshold', thresholdKritis);
+        renderDashboardStats();
+        notify(`Threshold kritis diperbarui menjadi ${thresholdKritis}.`, 'info', 2000);
+    }
+
+    // --- History Logic ---
+
+    function renderHistory() {
+        const tableBody = document.getElementById('historyTable');
+        if (!tableBody) return;
+        tableBody.innerHTML = '';
+
+        const filterBarang = (document.getElementById('filterBarang')?.value || '').toLowerCase();
+        const filterUser = (document.getElementById('filterUser')?.value || '').toLowerCase();
+        const filterStart = document.getElementById('filterStart')?.value;
+        const filterEnd = document.getElementById('filterEnd')?.value;
+
+        const filteredHistory = historyLog.filter(log => {
+            const time = new Date(log.time);
+            const logDate = time.toISOString().split('T')[0];
+
+            if (filterBarang && !(log.barang || '').toLowerCase().includes(filterBarang)) return false;
+            if (filterUser && !(log.user || '').toLowerCase().includes(filterUser)) return false;
+            if (filterStart && logDate < filterStart) return false;
+            if (filterEnd && logDate > filterEnd) return false;
+
+            return true;
+        }).reverse();
+
+        filteredHistory.forEach(log => {
+            const time = new Date(log.time).toLocaleString('id-ID');
+            const row = tableBody.insertRow();
+            row.innerHTML = `
+                <td class="border px-2 py-1 text-sm">${time}</td>
+                <td class="border px-2 py-1 text-sm">${escapeHtml(log.user || '-')}</td>
+                <td class="border px-2 py-1 text-sm">${escapeHtml(log.barang || '-')}</td>
+                <td class="border px-2 py-1 text-sm">${escapeHtml(log.personil || '-')}</td>
+                <td class="border px-2 py-1 text-sm">${log.sisaKemarin || 0}</td>
+                <td class="border px-2 py-1 text-sm">${log.orderReguler || 0}</td>
+                <td class="border px-2 py-1 text-sm">${log.orderTambahan || 0}</td>
+                <td class="border px-2 py-1 text-sm text-green-600 font-medium">${sumArray(log.in)} (${log.in.length}x)</td>
+                <td class="border px-2 py-1 text-sm text-red-600 font-medium">${sumArray(log.out)} (${log.out.length}x)</td>
+                <td class="border px-2 py-1 text-sm font-bold">${log.stokData || 0}</td>
+                <td class="border px-2 py-1 text-sm">${log.stokReal || 0}</td>
+                <td class="border px-2 py-1 text-sm">${log.stokKurangBesok || 0}</td>
+                <td class="border px-2 py-1 text-sm">${log.rusak || 0}</td>
+                <td class="border px-2 py-1 text-sm">${log.susut || 0}</td>
+            `;
+        });
+    }
+
+    function filterHistory() {
+
+        renderHistory();
+        notify('History berhasil difilter.', 'info', 1500);
+    }
+
+    function clearHistory() {
+        if (confirm('Anda yakin ingin menghapus semua Log History? (Data Gudang tidak akan terpengaruh)')) {
+            pushSnapshot('Bersihkan History'); 
+            historyLog = [];
+            persistAll('History Cleared');
+            notify('History log berhasil dibersihkan.', 'success', 2000);
+        }
+    }
+
+    function resetHistoryFilters() {
+        document.getElementById('filterBarang').value = '';
+        document.getElementById('filterUser').value = '';
+        document.getElementById('filterStart').value = '';
+        document.getElementById('filterEnd').value = '';
+        renderHistory();
+        notify('Filter History direset.', 'info', 1500);
+    }
+    let stokChartInstance; 
+    function renderDashboardStats() {
+        const totalStok = gudangData.reduce((sum, item) => sum + (item.stokReal || 0), 0);
+        const hampirHabis = gudangData.filter(item => (item.stokReal || 0) <= thresholdKritis && (item.stokReal || 0) > 0).length;
+        
+        const now = new Date();
+        const totalPengadaan = historyLog.filter(log => {
+            const logDate = new Date(log.time);
+            return logDate.getMonth() === now.getMonth() && logDate.getFullYear() === now.getFullYear() && sumArray(log.in) > 0;
+        }).reduce((sum, log) => sum + sumArray(log.in), 0);
+
+        document.getElementById('totalStok').textContent = totalStok;
+        document.getElementById('hampirHabis').textContent = hampirHabis;
+        document.getElementById('totalPengadaan').textContent = totalPengadaan;
+        document.getElementById('totalItems').textContent = gudangData.length;
+        document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('id-ID');
+        document.getElementById('autoStatus').textContent = autoCorrection ? 'ON' : 'OFF';
+
+        document.getElementById('hampirHabis').classList.toggle('text-yellow-500', hampirHabis > 0);
+        document.getElementById('hampirHabis').classList.toggle('text-red-600', hampirHabis > 0); 
+       
+        const topItems = gudangData
+            .filter(item => (item.stokReal || 0) > 0)
+            .sort((a, b) => (b.stokReal || 0) - (a.stokReal || 0))
+            .slice(0, 5); 
+        
+        if (stokChartInstance) {
+            stokChartInstance.destroy();
+        }
+
+let isGudangEditing = false;
+let originalGudangDataSnapshot = []; 
+
+function toggleGudangCellEdit(cell, isEditing, item, key) {
+  
+    const inputType = (key === 'barang' || key === 'personil') ? 'text' : 'number';
+    
+    if (isEditing) {
+        let inputHtml = '';
+        let alignClass = 'text-center';
+        
+        if (key === 'barang') {
+            alignClass = 'text-left';
+            inputHtml = `<input type="text" value="${item[key] || ''}" class="w-full ${alignClass} text-sm border rounded p-1 dark:bg-gray-700 dark:border-gray-600 editable-gudang-input" data-id="${item.id}" data-key="${key}" oninput="updateGudangCell(this)" />`;
+        } else {
+          
+            inputHtml = `<input type="${inputType}" value="${item[key] || 0}" ${inputType === 'number' ? '' : ''} class="w-full ${alignClass} text-center text-sm border rounded p-1 dark:bg-gray-700 dark:border-gray-600 editable-gudang-input" data-id="${item.id}" data-key="${key}" oninput="updateGudangCell(this)" />`;
+        }
+
+        cell.innerHTML = inputHtml;
+        cell.classList.remove('text-center', 'text-left');
+        cell.classList.add('p-0'); 
+    } else {
+       
+        const value = item[key] !== undefined ? item[key] : '';
+        
+        let valueHtml = `<span class="text-xs">${value}</span>`;
+        if (key === 'sisaData') {
+             valueHtml = `<span class="text-xs font-semibold ${value < 0 ? 'text-red-600' : 'text-blue-600'}">${value}</span>`;
+        } else if (key === 'selisih') {
+            const color = value > 0 ? 'text-green-600' : value < 0 ? 'text-red-600' : '';
+            valueHtml = `<span class="text-xs font-semibold ${color}">${value}</span>`;
+        }
+        
+        cell.innerHTML = valueHtml;
+        cell.classList.remove('p-0');
+        cell.classList.add(key === 'barang' ? 'text-left' : 'text-center');
+    }
+}
+
+function updateGudangCell(input) {
+    const itemId = input.getAttribute('data-id');
+    const key = input.getAttribute('data-key');
+    let newValue = input.value;
+    
+    if (key !== 'barang' && key !== 'personil') {
+        newValue = Number(newValue) || 0;
+    }
+
+    const itemIndex = gudangData.findIndex(item => item.id == itemId); 
+    
+    if (itemIndex !== -1) {
+        gudangData[itemIndex][key] = newValue;
+        
+    }
+}
+
+function toggleGudangEdit() {
+    if (typeof gudangData === 'undefined') {
+        notify('Error: Variabel gudangData tidak terdefinisi.', 'error', 3000);
+        return;
+    }
+    
+    isGudangEditing = !isGudangEditing;
+    const editBtn = document.getElementById('gudangEditBtn');
+    const saveBtn = document.getElementById('gudangSaveBtn');
+    const gudangTableBody = document.getElementById('gudangTable');
+    
+    if (isGudangEditing) {
+
+        notify('Mode Edit Tabel Aktif: Semua kolom data kini dapat diedit secara manual. Harap berhati-hati saat mengubah data yang dihitung.', 'warning', 6000);
+        editBtn.textContent = 'Batal Edit';
+        editBtn.classList.remove('bg-yellow-500');
+        editBtn.classList.add('bg-gray-500');
+        saveBtn.classList.remove('hidden');
+
+        originalGudangDataSnapshot = JSON.parse(JSON.stringify(gudangData));
+
+    
+        const keys = ['barang', 'personil', 'orderReg', 'orderTambahan', 'in', 'out', 'sisaKemarin', 'sisaData', 'sisaReal', 'rusak', 'susut', 'selisih'];
+
+        Array.from(gudangTableBody.rows).forEach((row, rowIndex) => {
+            const item = gudangData[rowIndex]; 
+            
+            for (let i = 0; i < keys.length; i++) {
+                const cell = row.cells[i];
+                const key = keys[i];
+
+                toggleGudangCellEdit(cell, true, item, key);
+            }
+        });
+    } else {
+        notify('Mode Edit dinonaktifkan. Perubahan dibatalkan.', 'warning', 2000);
+
+        gudangData = originalGudangDataSnapshot; 
+        
+        editBtn.textContent = 'Edit Tabel';
+        editBtn.classList.remove('bg-gray-500');
+        editBtn.classList.add('bg-yellow-500');
+        saveBtn.classList.add('hidden');
+        
+        if (typeof renderTable === 'function') {
+            renderTable();
+        } else {
+            console.error("Fungsi renderTable() tidak ditemukan.");
+        }
+    }
+}
+
+        const ctx = document.getElementById('stokChart').getContext('2d');
+        stokChartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: topItems.map(item => item.barang.split(' ')[0]), 
+                datasets: [{
+                    label: 'Stok Real',
+                    data: topItems.map(item => item.stokReal),
+                    backgroundColor: topItems.map(item => item.stokReal <= thresholdKritis ? '#dc2626' : '#2563eb'), 
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: { label: (context) => `Stok: ${context.raw}` } }
+                },
+                scales: {
+                    y: { beginAtZero: true, grid: { color: 'rgba(150,150,150,0.1)' } },
+                    x: { grid: { display: false } }
+                }
+            }
+        });
+
+        const topIn = historyLog.filter(log => sumArray(log.in) > 0)
+          .sort((a,b) => sumArray(b.in) - sumArray(a.in))[0];
+        const topOut = historyLog.filter(log => sumArray(log.out) > 0)
+          .sort((a,b) => sumArray(b.out) - sumArray(a.out))[0];
+        
+        let masukKeluarText = '-';
+        if (topIn && topOut) {
+          masukKeluarText = `IN: ${sumArray(topIn.in)} (${topIn.barang})\nOUT: ${sumArray(topOut.out)} (${topOut.barang})`;
+        } else if (topIn) {
+          masukKeluarText = `IN: ${sumArray(topIn.in)} (${topIn.barang})`;
+        } else if (topOut) {
+          masukKeluarText = `OUT: ${sumArray(topOut.out)} (${topOut.barang})`;
+        }
+        document.getElementById('masukKeluar').textContent = masukKeluarText;
+    }
+
+    // --- Modal CRUD Logic ---
+
+    function openModal(mode, index = null) {
+        document.getElementById('stokModal').classList.remove('hidden');
+        document.getElementById('stokModal').classList.add('flex');
+        
+        // Reset form
+        document.getElementById('modalTitle').textContent = 'Tambah Stok';
+        document.getElementById('modalPersonil').value = '';
+        document.getElementById('modalBarang').value = '';
+        document.getElementById('modalSupplier').value = '';
+        document.getElementById('modalOrderReguler').value = 0;
+        document.getElementById('modalOrderTambahan').value = 0;
+        document.getElementById('modalReal').value = '';
+        document.getElementById('modalKekuranganBesok').value = 0;
+        document.getElementById('modalRusak').value = 0;
+        document.getElementById('modalSusut').value = 0;
+        document.getElementById('confirmSaveBtn').setAttribute('data-index', '');
+
+        const inColsContainer = document.getElementById('inCols');
+        const outColsContainer = document.getElementById('outCols');
+        inColsContainer.innerHTML = '';
+        outColsContainer.innerHTML = '';
+        
+        if (mode === 'add') {
+            document.getElementById('modalTitle').textContent = 'Tambah Item Baru';
+            addInCol();
+            addOutCol();
+        } else if (mode === 'edit' && index !== null) {
+            const item = gudangData[index];
+            document.getElementById('modalTitle').textContent = `Edit Stok: ${item.barang}`;
+            document.getElementById('confirmSaveBtn').setAttribute('data-index', index);
+            
+            document.getElementById('modalPersonil').value = item.personil || '';
+            document.getElementById('modalBarang').value = item.barang;
+            document.getElementById('modalSupplier').value = item.supplier || '';
+            document.getElementById('modalOrderReguler').value = item.orderReguler || 0;
+            document.getElementById('modalOrderTambahan').value = item.orderTambahan || 0;
+            document.getElementById('modalReal').value = item.stokReal || 0;
+            document.getElementById('modalKekuranganBesok').value = item.stokKurangBesok || 0;
+            document.getElementById('modalRusak').value = item.rusak || 0;
+            document.getElementById('modalSusut').value = item.susut || 0;
+
+            item.inCols.forEach(val => addInCol(val));
+            if (item.inCols.length === 0) addInCol();
+            item.outCols.forEach(val => addOutCol(val));
+            if (item.outCols.length === 0) addOutCol();
+        }
+    }
+
+    function cancelStokModal() {
+        document.getElementById('stokModal').classList.add('hidden');
+        document.getElementById('stokModal').classList.remove('flex');
+    }
+
+    function addInCol(value = '') {
+        const container = document.getElementById('inCols');
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.placeholder = `IN ${container.children.length + 1}`;
+        input.value = value;
+        input.className = 'w-full px-3 py-2 border rounded-lg in-col-input dark:bg-gray-700 dark:border-gray-600';
+        container.appendChild(input);
+    } 
+
+    function removeInCol() {
+        const container = document.getElementById('inCols');
+        if (container.children.length > 1) {
+            container.removeChild(container.lastChild);
+        } else {
+            notify('Minimal harus ada 1 kolom IN.', 'warning', 1500);
+        }
+    }
+
+    function addOutCol(value = '') {
+        const container = document.getElementById('outCols');
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.placeholder = `OUT ${container.children.length + 1}`;
+        input.value = value;
+        input.className = 'w-full px-3 py-2 border rounded-lg out-col-input dark:bg-gray-700 dark:border-gray-600';
+        container.appendChild(input);
+    } 
+
+    function removeOutCol() {
+        const container = document.getElementById('outCols');
+        if (container.children.length > 1) {
+            container.removeChild(container.lastChild);
+        } else {
+            notify('Minimal harus ada 1 kolom OUT.', 'warning', 1500);
+        }
+    }
+
+    function confirmSaveStokWithCheck() {
+        const index = document.getElementById('confirmSaveBtn').getAttribute('data-index');
+        const isEdit = index !== '';
+        
+        const personil = document.getElementById('modalPersonil').value.trim() || 'Unknown'; // Ambil Personil
+        const barang = document.getElementById('modalBarang').value.trim();
+        const supplier = document.getElementById('modalSupplier').value.trim() || 'Unknown';
+        const orderReguler = Number(document.getElementById('modalOrderReguler').value) || 0; // Ambil Order Reguler
+        const orderTambahan = Number(document.getElementById('modalOrderTambahan').value) || 0; // Ambil Order Tambahan
+        const stokReal = Number(document.getElementById('modalReal').value) || 0;
+        const stokKurangBesok = Number(document.getElementById('modalKekuranganBesok').value) || 0; // Ambil Kekurangan Besok
+        const rusak = Number(document.getElementById('modalRusak').value) || 0;
+        const susut = Number(document.getElementById('modalSusut').value) || 0;
+        const user = document.getElementById('modalUser').value.trim() || 'Admin';
+
+        const inCols = Array.from(document.querySelectorAll('#inCols .in-col-input')).map(input => Number(input.value) || 0);
+        const outCols = Array.from(document.querySelectorAll('#outCols .out-col-input')).map(input => Number(input.value) || 0);
+
+        if (barang === '') {
+            notify('Nama Barang tidak boleh kosong.', 'error');
+            return;
+        }
+
+        let stokKemarin = 0;
+        let oldItem = null;
+        let action = isEdit ? `Edit Manual: ${barang}` : `Tambah Item: ${barang}`;
+
+        if (isEdit) {
+            const i = Number(index);
+            oldItem = gudangData[i];
+            stokKemarin = oldItem.stokKemarin || 0;
+        } else if (gudangData.some(item => item.barang.toLowerCase() === barang.toLowerCase())) {
+            notify('Barang dengan nama tersebut sudah ada. Harap gunakan fitur Edit.', 'error');
+            return;
+        }
+
+        const totalIn = sumArray(inCols);
+        const totalOut = sumArray(outCols);
+        const stokData = stokKemarin + totalIn - totalOut - rusak - susut - stokKurangBesok;
+
+        const newItem = {
+            barang: barang,
+            supplier: supplier,
+            personil: personil, // Simpan Personil
+            orderReguler: orderReguler, // Simpan Order Reguler
+            orderTambahan: orderTambahan, // Simpan Order Tambahan
+            stok: stokData,
+            stokReal: stokReal,
+            rusak: rusak,
+            susut: susut,
+            inCols: inCols,
+            outCols: outCols,
+            stokKemarin: stokKemarin,
+            stokKurangBesok: stokKurangBesok, // Simpan Kekurangan Besok
+            satuan: oldItem ? oldItem.satuan : 'unit',
+            qtyPerKantong: oldItem ? oldItem.qtyPerKantong : undefined,
+            qtyPerSak: oldItem ? oldItem.qtyPerSak : undefined,
+        };
+
+        if (isEdit) {
+            const i = Number(index);
+            // Salin properti baru ke item lama di gudangData
+            Object.assign(gudangData[i], newItem);
+
+            // Log history hanya jika ada perubahan signifikan
+            // Asumsi: log history mencatat nilai BARU
+            logHistory({
+                barang: newItem.barang,
+                supplier: newItem.supplier,
+                user: user,
+                personil: newItem.personil,
+                sisaKemarin: stokKemarin,
+                orderReguler: newItem.orderReguler,
+                orderTambahan: newItem.orderTambahan,
+                in: newItem.inCols,
+                out: newItem.outCols,
+                stokData: newItem.stok,
+                stokReal: newItem.stokReal,
+                stokKurangBesok: newItem.stokKurangBesok,
+                rusak: newItem.rusak,
+                susut: newItem.susut,
+                action: isEdit ? 'Edit Item' : 'Add Item'
+            });
+        } else {
+            // Add new item
+            gudangData.push(newItem);
+            
+            // Log history untuk item baru
+            logHistory({
+                barang: newItem.barang,
+                supplier: newItem.supplier,
+                user: user,
+                personil: newItem.personil,
+                sisaKemarin: 0,
+                orderReguler: newItem.orderReguler,
+                orderTambahan: newItem.orderTambahan,
+                in: newItem.inCols,
+                out: newItem.outCols,
+                stokData: newItem.stok,
+                stokReal: newItem.stokReal,
+                stokKurangBesok: newItem.stokKurangBesok,
+                rusak: newItem.rusak,
+                susut: newItem.susut,
+                action: 'Add Item'
+            });
+        }
+
+        cancelStokModal();
+        persistAll(action);
+        notify(`Item ${barang} berhasil ${isEdit ? 'diperbarui' : 'ditambahkan'}.`, 'success', 2000);
+    }
+    
+    // --- Bulk Modal Logic ---
+
+    function openBulk() {
+        document.getElementById('bulkModal').classList.remove('hidden');
+        document.getElementById('bulkModal').classList.add('flex');
+    }
+    
+    function closeBulk() {
+        document.getElementById('bulkModal').classList.add('hidden');
+        document.getElementById('bulkModal').classList.remove('flex');
+    }
+
+    function processBulkData() {
+        const data = document.getElementById('bulkData').value.trim();
+        const user = document.getElementById('bulkUser').value.trim() || 'Admin';
+        const lines = data.split('\n').filter(line => line.trim() !== '');
+        
+        if (lines.length === 0) {
+            notify('Tidak ada data untuk diproses.', 'warning');
+            return;
+        }
+
+        let successfulUpdates = 0;
+        
+        pushSnapshot('Bulk IN/OUT Update'); 
+
+        lines.forEach(line => {
+            // Format: [Barang], [Supplier], [IN (Total)], [OUT (Total)], [Rusak], [Susut], [Sisa Real]
+            const parts = line.split(',').map(p => p.trim());
+            
+            if (parts.length < 7) {
+                console.warn(`Baris diabaikan (format salah): ${line}`);
+                notify(`Format data salah untuk baris: ${parts[0]}. Diabaikan.`, 'warning', 3000);
+                return;
+            }
+
+            const [barang, supplier, inTotal, outTotal, rusak, susut, stokReal] = parts;
+            
+            const totalIn = Number(inTotal) || 0;
+            const totalOut = Number(outTotal) || 0;
+            const itemRusak = Number(rusak) || 0;
+            const itemSusut = Number(susut) || 0;
+            const itemReal = Number(stokReal) || 0;
+
+            if (!barang) {
+              notify('Nama barang tidak valid di salah satu baris Bulk.', 'error', 3000);
+              return;
+            }
+            
+            const itemIndex = gudangData.findIndex(item => item.barang.toLowerCase() === barang.toLowerCase());
+
+            if (itemIndex !== -1) {
+                // Edit existing item
+                const item = gudangData[itemIndex];
+                
+                // Tambahkan total IN/OUT ke kolom baru
+                item.inCols.push(totalIn);
+                item.outCols.push(totalOut);
+                
+                item.rusak += itemRusak;
+                item.susut += itemSusut;
+                item.stokReal = itemReal; // Real stok menimpa nilai lama
+                
+                const currentTotalIn = sumArray(item.inCols);
+                const currentTotalOut = sumArray(item.outCols);
+                // Hitung ulang stok data
+                item.stok = item.stokKemarin + currentTotalIn - currentTotalOut - item.rusak - item.susut - item.stokKurangBesok;
+                
+                logHistory({
+                    barang: item.barang,
+                    supplier: item.supplier,
+                    user: user,
+                    personil: item.personil,
+                    sisaKemarin: item.stokKemarin,
+                    orderReguler: item.orderReguler,
+                    orderTambahan: item.orderTambahan,
+                    in: [totalIn], // Catat total IN/OUT baru
+                    out: [totalOut],
+                    stokData: item.stok,
+                    stokReal: item.stokReal,
+                    stokKurangBesok: item.stokKurangBesok,
+                    rusak: itemRusak,
+                    susut: itemSusut,
+                    action: 'Bulk Edit'
+                });
+                successfulUpdates++;
+            } else if (totalIn > 0 || totalOut > 0) {
+                // Tambahkan item baru
+                const stokData = 0 + totalIn - totalOut - itemRusak - itemSusut;
+
+                gudangData.push({
+                    barang: barang,
+                    supplier: supplier,
+                    personil: '',
+                    orderReguler: 0,
+                    orderTambahan: 0,
+                    stok: stokData,
+                    stokReal: itemReal,
+                    rusak: itemRusak,
+                    susut: itemSusut,
+                    inCols: [totalIn],
+                    outCols: [totalOut],
+                    stokKemarin: 0,
+                    stokKurangBesok: 0,
+                    satuan: 'unit',
+                });
+                
+                logHistory({
+                    barang: barang,
+                    supplier: supplier,
+                    user: user,
+                    personil: '',
+                    sisaKemarin: 0,
+                    orderReguler: 0,
+                    orderTambahan: 0,
+                    in: [totalIn],
+                    out: [totalOut],
+                    stokData: stokData,
+                    stokReal: itemReal,
+                    stokKurangBesok: 0,
+                    rusak: itemRusak,
+                    susut: itemSusut,
+                    action: 'Bulk Add'
+                });
+                successfulUpdates++;
+            }
+        });
+
+        closeBulk();
+        persistAll('Bulk Update Completed');
+        notify(`${successfulUpdates} item berhasil diperbarui/ditambahkan dari Bulk Data.`, 'success', 3000);
+        document.getElementById('bulkData').value = ''; // Clear textarea
+    }
+
+    // --- Day Transition / End-of-Day Logic ---
+
+    function performDayTransition() {
+        if (!confirm('Anda yakin ingin melakukan Transisi Hari? Semua kolom IN/OUT harian, Order, Rusak, dan Susut akan di-reset, dan Sisa Data akan menjadi Stok Kemarin.')) {
+            return;
+        }
+
+        pushSnapshot('Day Transition Start');
+        
+        gudangData.forEach(item => {
+            // Hitung Sisa Data saat ini sebelum di-reset
+            const totalIn = sumArray(item.inCols);
+            const totalOut = sumArray(item.outCols);
+            const sisaDataSaatIni = item.stokKemarin + totalIn - totalOut - (item.rusak || 0) - (item.susut || 0) - (item.stokKurangBesok || 0);
+
+            // Log history Day Transition
+            logHistory({
+                barang: item.barang,
+                supplier: item.supplier,
+                user: 'System', 
+                personil: item.personil,
+                sisaKemarin: item.stokKemarin,
+                orderReguler: item.orderReguler,
+                orderTambahan: item.orderTambahan,
+                in: [totalIn], // Total harian IN/OUT dicatat
+                out: [totalOut],
+                stokData: sisaDataSaatIni, // Stok akhir hari
+                stokReal: item.stokReal, // Real akhir hari
+                stokKurangBesok: item.stokKurangBesok,
+                rusak: item.rusak, 
+                susut: item.susut, 
+                action: 'Day Transition'
+            });
+
+            // 1. Pindahkan Stok Data ke Stok Kemarin
+            item.stokKemarin = sisaDataSaatIni;
+
+            // 2. Reset data harian
+            item.inCols = [];
+            item.outCols = [];
+            item.rusak = 0;
+            item.susut = 0;
+            item.orderReguler = 0;
+            item.orderTambahan = 0;
+            item.personil = '';
+            item.stokKurangBesok = 0;
+            
+            // 3. Update stokData agar sama dengan stokKemarin
+            item.stokData = item.stokKemarin; 
+            
+            // 4. Stok Real TIDAK di-reset, tetap menjadi stok real terakhir
+            // item.stokReal = 0; // Sebaiknya tidak di-reset agar bisa dibandingkan
+
+        });
+
+        notify('Transisi Hari berhasil! Data harian telah direset.', 'success', 3000);
+        persistAll('Day Transition Completed');
+    }
+
+    function clearAllData() {
+        if (!confirm('PERINGATAN! Tindakan ini akan menghapus SEMUA data gudang, history, dan undo/redo stack! Anda yakin?')) {
+            return;
+        }
+        localStorage.removeItem(STORAGE_GUDANG_KEY);
+        localStorage.removeItem(STORAGE_HISTORY_KEY);
+        localStorage.removeItem(STORAGE_UNDO_KEY);
+        localStorage.removeItem(STORAGE_REDO_KEY);
+        
+        // Re-initialize all data
+        gudangData = loadAndMergeData();
+        historyLog = [];
+        undoStack = [];
+        redoStack = [];
+        
+        pushSnapshot('State Awal (Reset)');
+        notify('Semua data berhasil direset dan dihapus.', 'error', 3000);
+        persistAll(); // PersistAll akan memanggil render dan saveLocal
+    }
+    function exportHistoryPDF() {
+        // Cek apakah library jsPDF/autoTable sudah dimuat
+        if (typeof window.jspdf === 'undefined' || typeof window.jspdf.jsPDF === 'undefined') {
+            notify('Error: Library jsPDF/autoTable belum dimuat. Pastikan CDN sudah ditambahkan di <head>.', 'error', 5000);
+            return;
+        }
+
+        const { jsPDF } = window.jspdf;
+        // Gunakan landscape ('l') agar kolom cukup
+        const doc = new jsPDF('l', 'pt', 'a4'); 
+        
+        // 1. Siapkan Header
+        const headers = [
+            'Waktu', 'User', 'Barang', 'Personil', 'Sisa Kemarin', 'Order Reguler', 
+            'Order Tambahan', 'Total IN', 'Total OUT', 'Sisa Data', 'Sisa Real', 
+            'Kurangan Besok', 'Rusak', 'Susut'
+        ];
+
+        // 2. Siapkan Data Body dari historyLog
+        const data = historyLog.map(log => [
+            new Date(log.time).toLocaleString('id-ID'),
+            log.user || '-',
+            log.barang || '-',
+            log.personil || '-',
+            log.sisaKemarin || 0,
+            log.orderReguler || 0,
+            log.orderTambahan || 0,
+            sumArray(log.in),
+            sumArray(log.out),
+            log.stokData || 0,
+            log.stokReal || 0,
+            log.stokKurangBesok || 0,
+            log.rusak || 0,
+            log.susut || 0
+        ]);
+
+        // 3. Tambahkan Konten ke PDF
+        const title = 'Laporan History Gudang Packing';
+        doc.setFontSize(18);
+        doc.text(title, doc.internal.pageSize.getWidth() / 2, 40, { align: 'center' });
+
+        doc.setFontSize(10);
+        doc.text(`Dicetak: ${new Date().toLocaleString('id-ID')}`, 50, 60);
+
+        doc.autoTable({
+            startY: 70,
+            head: [headers],
+            body: data,
+            theme: 'striped',
+            headStyles: { 
+                fillColor: [220, 53, 69], // Red 600
+                textColor: 255,
+                fontSize: 8,
+                halign: 'center' 
+            },
+            styles: { 
+                fontSize: 7, 
+                cellPadding: 3, 
+                overflow: 'linebreak',
+                halign: 'center'
+            },
+            columnStyles: {
+                0: { halign: 'left', cellWidth: 70 }, // Waktu
+                2: { halign: 'left', cellWidth: 80 }, // Barang
+                // Kolom lainnya akan dihitung otomatis oleh autoTable
+            },
+            didDrawPage: function(data) {
+                // Footer (Nomor Halaman)
+                doc.setFontSize(8);
+                const pageCount = doc.internal.getNumberOfPages();
+                doc.text('Halaman ' + data.pageNumber + ' dari ' + pageCount, data.settings.margin.left, doc.internal.pageSize.getHeight() - 20);
+            }
+        });
+
+        // 4. Simpan File
+        doc.save(`History_Gudang_Packing_${new Date().toISOString().split('T')[0]}.pdf`);
+        notify('History berhasil di-export sebagai PDF!', 'success', 3000);
+    }
+
+    function exportToCSV(data, filename) {
+        const csv = data.map(row => row.join(',')).join('\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        if (link.download !== undefined) {
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', filename);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            notify(`${filename} berhasil di-export!`, 'success', 2000);
+        }
+    }
+
+    function exportHistoryCSV() {
+        const header = ['Waktu', 'User', 'Barang', 'Supplier', 'Personil', 'Sisa Kemarin', 'Order Reguler', 'Order Tambahan', 'Total IN', 'Total OUT', 'Sisa Data', 'Sisa Real', 'Kekurangan Besok', 'Rusak', 'Susut', 'Aksi'];
+        const data = historyLog.map(log => [
+            `"${new Date(log.time).toLocaleString('id-ID')}"`,
+            `"${log.user || '-'}"`,
+            `"${log.barang || '-'}"`,
+            `"${log.supplier || '-'}"`,
+            `"${log.personil || '-'}"`,
+            log.sisaKemarin || 0,
+            log.orderReguler || 0,
+            log.orderTambahan || 0,
+            sumArray(log.in),
+            sumArray(log.out),
+            log.stokData || 0,
+            log.stokReal || 0,
+            log.stokKurangBesok || 0,
+            log.rusak || 0,
+            log.susut || 0,
+            `"${log.action || ''}"`
+        ]);
+        
+        exportToCSV([header, ...data], `History_Gudang_${new Date().toISOString().split('T')[0]}.csv`);
+    }
+
+    function generateRecap(timeframe) {
+        let title = timeframe === 'daily' ? 'Rekap Harian' : 'Rekap Mingguan';
+        
+        const now = new Date();
+        let startDate;
+
+        if (timeframe === 'daily') {
+            startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        } else { // weekly
+            const day = now.getDay();
+            const diff = now.getDate() - day + (day === 0 ? -6 : 1); // Senin
+            startDate = new Date(now.setDate(diff));
+            startDate.setHours(0, 0, 0, 0);
+        }
+
+        const filteredHistory = historyLog.filter(log => {
+            return new Date(log.time) >= startDate;
+        });
+
+        const recap = {};
+
+        // Inisialisasi dari data gudang saat ini
+        gudangData.forEach(item => {
+            recap[item.barang] = {
+                startStok: 0, 
+                in: 0,
+                out: 0,
+                rusak: 0,
+                susut: 0
+            };
+        });
+
+        // Kumpulkan data dari history (Ini adalah penyederhanaan. Idealnya, startStok diambil dari log 'Day Transition' terakhir)
+        filteredHistory.forEach(log => {
+            const barang = log.barang;
+            if (!recap[barang]) {
+                 recap[barang] = { startStok: 0, in: 0, out: 0, rusak: 0, susut: 0 };
+            }
+            recap[barang].in += sumArray(log.in);
+            recap[barang].out += sumArray(log.out);
+            recap[barang].rusak += (log.rusak || 0);
+            recap[barang].susut += (log.susut || 0);
+
+            // Jika ada log Day Transition di rentang waktu ini, update startStok
+            if (log.action === 'Day Transition' && new Date(log.time) < startDate) {
+                 recap[barang].startStok = log.stokData;
+            } else if (!recap[barang].startStok) {
+                // Untuk item yang tidak ada Day Transition, ambil Stok Kemarin dari log pertama
+                 recap[barang].startStok = log.sisaKemarin || 0;
+            }
+        });
+
+        return { title, recap };
+    }
+
+// --- Global State Baru untuk Recap Modal ---
+let currentRecapData = {};
+let currentRecapTitle = '';
+let isRecapEditing = false;
+
+
+// Fungsi utilitas untuk mengganti sel antara teks dan input
+function toggleCellEdit(cell, isEditing) {
+    // Index Kolom: 0=Barang, 1=StokAwal, 2=IN, 3=OUT, 4=Rusak, 5=Susut, 6=PerkiraanAkhir
+    const editableCols = [2, 3, 4, 5];
+    const colIndex = cell.cellIndex;
+
+    if (!editableCols.includes(colIndex)) return;
+    
+    // Tentukan key data berdasarkan index kolom
+    let dataKey;
+    switch(colIndex) {
+        case 2: dataKey = 'in'; break;
+        case 3: dataKey = 'out'; break;
+        case 4: dataKey = 'rusak'; break;
+        case 5: dataKey = 'susut'; break;
+        default: return;
+    }
+    
+    // Ambil nama barang dari kolom pertama
+    const row = cell.parentNode;
+    const barangName = row.cells[0].textContent.trim();
+    const currentValue = currentRecapData[barangName] ? (currentRecapData[barangName][dataKey] || 0) : 0;
+
+    if (isEditing) {
+        // Ganti ke input field
+        cell.innerHTML = `
+            <input 
+                type="number" 
+                value="${currentValue}" 
+                min="0"
+                class="w-full text-center text-sm border rounded p-1 dark:bg-gray-700 dark:border-gray-600 editable-recap-input"
+                data-barang="${barangName}"
+                data-key="${dataKey}"
+                oninput="updateRecapEstimate(this)"
+            />
+        `;
+        cell.classList.remove('text-center');
+        cell.classList.add('p-0'); // Hilangkan padding sel agar input pas
+    } else {
+        // Kembali ke tampilan teks
+        cell.innerHTML = `<span class="text-sm">${currentValue}</span>`;
+        cell.classList.remove('p-0');
+        cell.classList.add('text-center');
+    }
+}
+
+// Fungsi untuk menghitung ulang 'Perkiraan Akhir' secara real-time
+function updateRecapEstimate(input) {
+    const barangName = input.getAttribute('data-barang');
+    const key = input.getAttribute('data-key');
+    const newValue = Number(input.value) || 0;
+    
+    if (!currentRecapData[barangName]) return;
+    
+    // Perbarui objek data sementara
+    currentRecapData[barangName][key] = newValue;
+    
+    const r = currentRecapData[barangName];
+    // Hitung stok akhir
+    const finalStok = (r.startStok || 0) + (r.in || 0) - (r.out || 0) - (r.rusak || 0) - (r.susut || 0);
+
+    // Perbarui sel 'Perkiraan Akhir' (index 6)
+    const row = input.closest('tr');
+    const finalStokCell = row.cells[6];
+    
+    finalStokCell.innerHTML = `<span class="text-sm font-bold ${finalStok < 0 ? 'text-red-600' : 'text-blue-600'}">${finalStok}</span>`;
+}
+
+function editRecap() {
+    isRecapEditing = !isRecapEditing;
+    const tableBody = document.getElementById('recapTableBody');
+    const editBtn = document.getElementById('recapEditBtn');
+    const saveBtn = document.getElementById('recapSaveBtn');
+    
+    if (isRecapEditing) {
+        notify('Mode Edit Aktif: Ubah nilai di kolom Total IN, OUT, Rusak, dan Susut.', 'info', 3000);
+        editBtn.textContent = 'Batal Edit';
+        editBtn.classList.remove('bg-yellow-500');
+        editBtn.classList.add('bg-gray-500');
+        saveBtn.classList.remove('hidden');
+
+        Array.from(tableBody.rows).forEach(row => {
+            for (let i = 2; i <= 5; i++) {
+                toggleCellEdit(row.cells[i], true);
+            }
+        });
+    } else {
+        // Keluar mode Edit (Batal)
+        notify('Mode Edit dinonaktifkan. Perubahan dibatalkan. (Data kembali ke state sebelum Edit)', 'warning', 2000);
+ 
+        
+        editBtn.textContent = 'Edit';
+        editBtn.classList.remove('bg-gray-500');
+        editBtn.classList.add('bg-yellow-500');
+        saveBtn.classList.add('hidden');
+        renderRecapTableBody(currentRecapData);
+    }
+}
+
+function saveRecap() {
+    const dataToSave = currentRecapData;
+    const title = currentRecapTitle;
+    if (typeof pushSnapshot === 'function') {
+        pushSnapshot(`Edit Rekap: ${title}`); 
+    }
+    for (const barang in dataToSave) {
+        const r = dataToSave[barang];
+        const itemIndex = gudangData.findIndex(item => item.barang === barang);
+        if (itemIndex !== -1) {
+            gudangData[itemIndex].in = r.in;
+            gudangData[itemIndex].out = r.out; 
+            gudangData[itemIndex].rusak = r.rusak; 
+            gudangData[itemIndex].susut = r.susut; 
+        }
+    }
+}
+
+    isRecapEditing = false;
+    const editBtn = document.getElementById('recapEditBtn');
+    const saveBtn = document.getElementById('recapSaveBtn');
+    
+    editBtn.textContent = 'Edit';
+    editBtn.classList.remove('bg-gray-500');
+    editBtn.classList.add('bg-yellow-500');
+    saveBtn.classList.add('hidden');
+    
+    renderRecapTableBody(dataToSave);
+    
+    if (typeof persistAll === 'function') {
+         persistAll();
+
+    notify(`Rekap '${title}' berhasil disimpan dan dikonfirmasi!`, 'success', 3000);
+}
+function renderRecapTableBody(recap) {
+    const tableBody = document.getElementById('recapTableBody');
+    tableBody.innerHTML = '';
+    
+    for (const barang in recap) {
+        const r = recap[barang];
+        const totalIn = Number(r.in) || 0;
+        const totalOut = Number(r.out) || 0;
+        const totalRusak = Number(r.rusak) || 0;
+        const totalSusut = Number(r.susut) || 0;
+        const startStok = Number(r.startStok) || 0;
+        
+        const finalStok = startStok + totalIn - totalOut - totalRusak - totalSusut;
+        
+        const row = tableBody.insertRow();
+        row.className = 'hover:bg-gray-50 dark:hover:bg-gray-700';
+        row.innerHTML = `
+            <td class="border px-2 py-1 text-left text-sm">${barang}</td>
+            <td class="border px-2 py-1 text-center text-sm">${startStok}</td>
+            <td class="border px-2 py-1 text-center text-sm text-green-600">${totalIn}</td>
+            <td class="border px-2 py-1 text-center text-sm text-red-600">${totalOut}</td>
+            <td class="border px-2 py-1 text-center text-sm">${totalRusak}</td>
+            <td class="border px-2 py-1 text-center text-sm">${totalSusut}</td>
+            <td class="border px-2 py-1 text-center text-sm font-bold ${finalStok < 0 ? 'text-red-600' : 'text-blue-600'}">${finalStok}</td>
+        `;
+    }
+}
+
+function showRecapModal(title, recap) {
+    const modal = document.getElementById('recapModal');
+    const titleEl = document.getElementById('recapModalTitle');
+    const tableHeader = document.getElementById('recapTableHeader');
+
+    currentRecapData = JSON.parse(JSON.stringify(recap)); 
+    currentRecapTitle = title;
+    isRecapEditing = false; 
+
+    const editBtn = document.getElementById('recapEditBtn');
+    const saveBtn = document.getElementById('recapSaveBtn');
+    editBtn.textContent = 'Edit';
+    editBtn.classList.remove('bg-gray-500');
+    editBtn.classList.add('bg-yellow-500');
+    saveBtn.classList.add('hidden');
+
+    titleEl.textContent = title;
+    tableHeader.innerHTML = '<tr><th class="border px-2 py-1 text-left">Barang</th><th class="border px-2 py-1">Stok Awal</th><th class="border px-2 py-1">Total IN</th><th class="border px-2 py-1">Total OUT</th><th class="border px-2 py-1">Total Rusak</th><th class="border px-2 py-1">Total Susut</th><th class="border px-2 py-1">Perkiraan Akhir</th></tr>';
+    
+    renderRecapTableBody(currentRecapData);
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    document.querySelector('#recapModal button[onclick="exportRecapPDF()"]').onclick = () => {
+        notify('Fungsi Export PDF (menggunakan data edit) dipanggil.', 'info', 2000);
+    };
+    document.getElementById('recapExportBtn').onclick = () => {
+        notify('Fungsi Export CSV (menggunakan data edit) dipanggil.', 'info', 2000);
+    };
+    
+    editBtn.onclick = editRecap;
+    saveBtn.onclick = saveRecap;
+}
+
+function saveRecap() {
+    notify('Fitur Konfirmasi/Simpan Rekap (placeholder) dipanggil.', 'success', 2000);
+}
+
+function exportRecapPDF(recapData, title) {
+    if (typeof window.jspdf === 'undefined' || typeof window.jspdf.jsPDF === 'undefined') {
+        notify('Error: Library jsPDF/autoTable belum dimuat. Pastikan CDN sudah ditambahkan di <head>.', 'error', 5000);
+        return;
+    }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF('p', 'pt', 'a4');
+    
+    const headers = [
+        'Barang', 'Stok Awal', 'Total IN', 'Total OUT', 'Total Rusak', 'Total Susut', 'Perkiraan Akhir'
+    ];
+
+    const data = Object.keys(recapData).map(barang => {
+        const r = recapData[barang];
+        const finalStok = r.startStok + r.in - r.out - r.rusak - r.susut;
+        return [
+            barang, 
+            r.startStok, 
+            r.in, 
+            r.out, 
+            r.rusak, 
+            r.susut, 
+            finalStok
+        ];
+    });
+
+    const docTitle = `Rekapitulasi: ${title}`;
+    doc.setFontSize(18);
+    doc.text(docTitle, doc.internal.pageSize.getWidth() / 2, 40, { align: 'center' });
+
+    doc.setFontSize(10);
+    doc.text(`Dicetak: ${new Date().toLocaleString('id-ID')}`, 50, 60);
+
+    doc.autoTable({
+        startY: 70,
+        head: [headers],
+        body: data,
+        theme: 'striped',
+        headStyles: { 
+            fillColor: [220, 53, 69],
+            textColor: 255,
+            fontSize: 8,
+            halign: 'center' 
+        },
+        styles: { 
+            fontSize: 7, 
+            cellPadding: 3, 
+            overflow: 'linebreak',
+            halign: 'center'
+        },
+        columnStyles: {
+            0: { halign: 'left', cellWidth: 100 },
+        },
+        didDrawPage: function(data) {
+            doc.setFontSize(8);
+            const pageCount = doc.internal.getNumberOfPages();
+            doc.text('Halaman ' + data.pageNumber + ' dari ' + pageCount, data.settings.margin.left, doc.internal.pageSize.getHeight() - 20);
+        }
+    });
+
+    doc.save(`${title.replace(' ', '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
+    notify(`${title} berhasil di-export sebagai PDF!`, 'success', 3000);
+}
+
+
+function showRecapModal(title, recap) {
+    const modal = document.getElementById('recapModal');
+    const titleEl = document.getElementById('recapModalTitle');
+    const tableHeader = document.getElementById('recapTableHeader');
+    const tableBody = document.getElementById('recapTableBody');
+
+    titleEl.textContent = title;
+    tableHeader.innerHTML = '<tr><th class="border px-2 py-1 text-left">Barang</th><th class="border px-2 py-1">Stok Awal</th><th class="border px-2 py-1">Total IN</th><th class="border px-2 py-1">Total OUT</th><th class="border px-2 py-1">Total Rusak</th><th class="border px-2 py-1">Total Susut</th><th class="border px-2 py-1">Perkiraan Akhir</th></tr>';
+    tableBody.innerHTML = '';
+    
+    for (const barang in recap) {
+        const r = recap[barang];
+        const finalStok = r.startStok + r.in - r.out - r.rusak - r.susut;
+        const row = tableBody.insertRow();
+        row.className = 'hover:bg-gray-50 dark:hover:bg-gray-700';
+        row.innerHTML = `
+            <td class="border px-2 py-1 text-left text-sm">${barang}</td>
+            <td class="border px-2 py-1 text-center text-sm">${r.startStok}</td>
+            <td class="border px-2 py-1 text-center text-sm text-green-600">${r.in}</td>
+            <td class="border px-2 py-1 text-center text-sm text-red-600">${r.out}</td>
+            <td class="border px-2 py-1 text-center text-sm">${r.rusak}</td>
+            <td class="border px-2 py-1 text-center text-sm">${r.susut}</td>
+            <td class="border px-2 py-1 text-center text-sm font-bold">${finalStok}</td>
+        `;
+    }
+    
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+
+    document.querySelector('#recapModal button[onclick="exportRecapPDF()"]').onclick = () => {
+        exportRecapPDF(recap, title);
+    };
+    
+    document.getElementById('recapExportBtn').onclick = () => {
+        exportRecapCSV(recap, title);
+    };
+}
+    function openDailyRecap() {
+        const { title, recap } = generateRecap('daily');
+        showRecapModal(title, recap);
+        document.getElementById('recapExportBtn').onclick = () => {
+            exportRecapCSV(recap, title);
+        };
+    }
+
+    function openWeeklyRecap() {
+        const { title, recap } = generateRecap('weekly');
+        showRecapModal(title, recap);
+        document.getElementById('recapExportBtn').onclick = () => {
+            exportRecapCSV(recap, title);
+        };
+    }
+
+    function showRecapModal(title, recap) {
+        const modal = document.getElementById('recapModal');
+        const titleEl = document.getElementById('recapModalTitle');
+        const tableHeader = document.getElementById('recapTableHeader');
+        const tableBody = document.getElementById('recapTableBody');
+
+        titleEl.textContent = title;
+        tableHeader.innerHTML = '<tr><th class="border px-2 py-1 text-left">Barang</th><th class="border px-2 py-1">Stok Awal</th><th class="border px-2 py-1">Total IN</th><th class="border px-2 py-1">Total OUT</th><th class="border px-2 py-1">Total Rusak</th><th class="border px-2 py-1">Total Susut</th><th class="border px-2 py-1">Perkiraan Akhir</th></tr>';
+        tableBody.innerHTML = '';
+        
+        for (const barang in recap) {
+            const r = recap[barang];
+            const finalStok = r.startStok + r.in - r.out - r.rusak - r.susut;
+            const row = tableBody.insertRow();
+            row.className = 'hover:bg-gray-50 dark:hover:bg-gray-700';
+            row.innerHTML = `
+                <td class="border px-2 py-1 text-left text-sm">${barang}</td>
+                <td class="border px-2 py-1 text-center text-sm">${r.startStok}</td>
+                <td class="border px-2 py-1 text-center text-sm text-green-600">${r.in}</td>
+                <td class="border px-2 py-1 text-center text-sm text-red-600">${r.out}</td>
+                <td class="border px-2 py-1 text-center text-sm">${r.rusak}</td>
+                <td class="border px-2 py-1 text-center text-sm">${r.susut}</td>
+                <td class="border px-2 py-1 text-center text-sm font-bold">${finalStok}</td>
+            `;
+        }
+        
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
+
+    function exportRecapCSV(recap, title) {
+        const header = ['Barang', 'Stok Awal', 'Total IN', 'Total OUT', 'Total Rusak', 'Total Susut', 'Perkiraan Akhir'];
+        const data = Object.keys(recap).map(barang => {
+            const r = recap[barang];
+            const finalStok = r.startStok + r.in - r.out - r.rusak - r.susut;
+            return [
+                `"${barang}"`, 
+                r.startStok, 
+                r.in, 
+                r.out, 
+                r.rusak, 
+                r.susut, 
+                finalStok
+            ];
+        });
+        exportToCSV([header, ...data], `${title.replace(' ', '_')}_${new Date().toISOString().split('T')[0]}.csv`);
+    }
+
+</script>
+
+<script>
+    const dataBarang = [
+      { id: 'BRG001', nama: 'Kertas A4 80gsm', satuan: 'RIM', tipe: 'BahanBaku' },
+      { id: 'BRG002', nama: 'Tinta Hitam Pigmen', satuan: 'LITER', tipe: 'BahanBaku' },
+      { id: 'BRG003', nama: 'Box Kemasan Kecil', satuan: 'PCS', tipe: 'Produk' },
+      { id: 'BRG004', nama: 'Plastik Wrapping', satuan: 'KG', tipe: 'BahanBaku' },
+      { id: 'BRG005', nama: 'Lakban Bening 2"', satuan: 'ROLL', tipe: 'BahanBaku' },
+      { id: 'BRG006', nama: 'Kardus Besar F', satuan: 'PCS', tipe: 'BahanBaku' },
+    ];
+   
+    const daftarBahanBaku = dataBarang.filter(item => item.tipe === 'BahanBaku' || !item.tipe); 
+
+    function openResepModal() {
+        document.getElementById('resepModal').classList.remove('hidden');
+        document.getElementById('resepModal').classList.add('flex');
+        document.getElementById('bahanBakuList').innerHTML = '';
+        tambahBahanBaku();
+        document.getElementById('namaProduk').value = '';
+        document.getElementById('kuantitasProduksi').value = 1;
+    }
+    
+    function closeResepModal() {
+        document.getElementById('resepModal').classList.add('hidden');
+        document.getElementById('resepModal').classList.remove('flex');
+    }
+
+    function getBahanBakuOptions(selectedId = '') {
+        let options = `<option value="" disabled ${selectedId ? '' : 'selected'}>Pilih Bahan Baku</option>`;
+        daftarBahanBaku.forEach(barang => {
+            options += `<option value="${barang.id}" ${barang.id === selectedId ? 'selected' : ''}>${barang.nama}</option>`;
+        });
+        return options;
+    }
+    
+    function buatBarisBahanBaku(itemId = '', quantity = '', unit = '') {
+        const newIndex = document.getElementById('bahanBakuList').children.length;
+        const rowId = `row-${newIndex}`;
+
+        return `
+            <tr id="${rowId}">
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <select 
+                        id="barangId-${newIndex}" 
+                        class="barang-select w-full rounded-lg border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm p-2.5 transition duration-150" 
+                        onchange="updateSatuan('${newIndex}')"
+                    >
+                        ${getBahanBakuOptions(itemId)}
+                    </select>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <input 
+                        type="number" 
+                        id="jumlah-${newIndex}" 
+                        value="${quantity || ''}" 
+                        min="0.01" 
+                        step="any" 
+                        class="w-full rounded-lg border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm p-2.5"
+                    >
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <span 
+                        id="satuan-${newIndex}" 
+                        class="satuan-display inline-block py-1 px-3 text-sm font-semibold rounded-full ${unit ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300' : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'}"
+                    >
+                        ${unit || 'Satuan'}
+                    </span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
+                    <button 
+                        onclick="hapusBahanBaku('${rowId}')" 
+                        class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-200 p-2 rounded-full hover:bg-red-50 dark:hover:bg-gray-700 transition"
+                        title="Hapus"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 10-2 0v6a1 1 0 102 0V8z" clip-rule="evenodd" /></svg>
+                    </button>
+                </td>
+            </tr>
+        `;
+    }
+
+    function tambahBahanBaku() {
+        const listContainer = document.getElementById('bahanBakuList');
+        listContainer.insertAdjacentHTML('beforeend', buatBarisBahanBaku());
+    }
+
+    function updateSatuan(index) {
+        const selectElement = document.getElementById(`barangId-${index}`);
+        const selectedId = selectElement.value;
+        const satuanElement = document.getElementById(`satuan-${index}`);
+
+
+        const barang = dataBarang.find(b => b.id === selectedId);
+
+        if (barang) {
+            satuanElement.textContent = barang.satuan;
+            satuanElement.className = 'satuan-display inline-block py-1 px-3 text-sm font-semibold rounded-full bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300';
+        } else {
+            satuanElement.textContent = 'Satuan';
+            satuanElement.className = 'satuan-display inline-block py-1 px-3 text-sm font-semibold rounded-full bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
+        }
+    }
+    
+    function hapusBahanBaku(rowId) {
+        const row = document.getElementById(rowId);
+        if (row) {
+            row.remove();
+        }
+    }
+
+    function getRecipeData() {
+        const produk = document.getElementById('namaProduk').value.trim();
+        const kuantitas = parseFloat(document.getElementById('kuantitasProduksi').value);
+        const rows = Array.from(document.getElementById('bahanBakuList').children);
+        let resep = [];
+        let validationError = false;
+
+        if (!produk || kuantitas <= 0 || isNaN(kuantitas)) {
+            notify('Nama Produk dan Kuantitas Produksi harus diisi dan lebih dari 0.', 'error', 3000);
+            return;
+        }
+
+        rows.forEach(row => {
+            const index = row.id.split('-')[1];
+            const barangIdSelect = document.getElementById(`barangId-${index}`);
+            const jumlahInput = document.getElementById(`jumlah-${index}`);
+            const barangId = barangIdSelect.value;
+            const jumlah = parseFloat(jumlahInput.value);
+            const satuan = document.getElementById(`satuan-${index}`).textContent;
+
+            if (barangId && jumlah > 0) {
+                const barang = daftarBahanBaku.find(b => b.id === barangId);
+                resep.push({
+                    barangId: barangId,
+                    namaBarang: barang ? barang.nama : 'Unknown',
+                    jumlah: jumlah,
+                    satuan: satuan
+                });
+            } else if (barangId || jumlahInput.value.trim() !== '') {
+                validationError = true;
+            }
+        });
+
+        if (validationError) {
+            notify('Terdapat baris Bahan Baku yang tidak lengkap atau jumlahnya 0. Harap perbaiki.', 'error', 4000);
+            return;
+        }
+
+        if (resep.length === 0) {
+            notify('Harus ada minimal satu Bahan Baku yang dibutuhkan.', 'warning', 3000);
+            return;
+        }
+
+        console.log({ produk: produk, kuantitas: kuantitas, bahanBaku: resep });
+        
+        notify(`Resep untuk ${produk} (${kuantitas} unit) berhasil disimpan.`, 'success', 3000);
+        closeResepModal();
+    }
+    
+    document.addEventListener('DOMContentLoaded', () => {
+        const simpanResepBtn = document.getElementById('simpanResepBtn');
+        if (simpanResepBtn) {
+            simpanResepBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                getRecipeData();
+            });
+        }
+    });
+</script>
+
+<script>
+    function init() {
+
+        const isDark = localStorage.getItem('darkMode') === 'enabled';
+        if (isDark) {
+            document.documentElement.classList.add('dark');
+            document.getElementById('themeButton').textContent = '☀️ Light Mode';
+        } else {
+            document.getElementById('themeButton').textContent = '🌙 Dark Mode';
+        }
+        
+        document.getElementById('autoCorrectionBtn').classList.toggle('bg-yellow-500', autoCorrection);
+        document.getElementById('autoCorrectionBtn').classList.toggle('bg-gray-500', !autoCorrection);
+        document.getElementById('autoCorrectionBtn').textContent = autoCorrection ? 'Auto Correction ON' : 'Auto Correction OFF';
+        document.getElementById('autoStatus').textContent = autoCorrection ? 'ON' : 'OFF';
+
+        gudangData = loadAndMergeData();
+        historyLog = loadHistory();
+        undoStack = loadStack(STORAGE_UNDO_KEY);
+        redoStack = loadStack(STORAGE_REDO_KEY);
+        
+        const currentUser = localStorage.getItem('currentUser') || 'Admin Utama';
+        document.getElementById('currentUserDisplay').textContent = currentUser; 
+        if (document.getElementById('modalUser')) document.getElementById('modalUser').value = currentUser;
+        if (document.getElementById('bulkUser')) document.getElementById('bulkUser').value = currentUser;
+
+        const threshold = Number(localStorage.getItem('stokThreshold') || 5);
+        if (document.getElementById('threshInput')) document.getElementById('threshInput').value = threshold;
+        thresholdKritis = threshold;
+
+        if (undoStack.length === 0 || gudangData.length > (undoStack[undoStack.length-1]?.gudang?.length || 0)) {
+            pushSnapshot('State Awal');
+        }
+      
+        renderTable();
+        renderHistory();
+        updateUndoRedoButtonStates();
+        renderDashboardStats();
+        
+   
+        if(document.getElementById('filterBarang')) document.getElementById('filterBarang').addEventListener('input', renderHistory);
+        if(document.getElementById('filterUser')) document.getElementById('filterUser').addEventListener('input', renderHistory);
+        if(document.getElementById('filterStart')) document.getElementById('filterStart').addEventListener('change', renderHistory); 
+        if(document.getElementById('filterEnd')) document.getElementById('filterEnd').addEventListener('change', renderHistory); 
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
+
+    window.addEventListener('keydown', function(e){
+        const isTyping = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT';
+        if (isTyping) return;
+
+        if (e.ctrlKey || e.metaKey) {
+            if (e.key === 'z' || e.key === 'Z') {
+                e.preventDefault();
+                undo();
+            } else if (e.key === 'y' || e.key === 'Y') {
+                e.preventDefault();
+                redo();
+            }
+        }
+    });
+</script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+  import { getFirestore } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "API_KEY",
+    authDomain: "xxx.firebaseapp.com",
+    projectId: "xxx",
+    storageBucket: "xxx.appspot.com",
+    messagingSenderId: "xxx",
+    appId: "xxx"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+</script>
+
+</body>
+</html>

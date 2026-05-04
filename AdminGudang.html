@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Gudang - Manajemen Staf & Supplier</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config = { darkMode: 'class' }</script>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    .card-shadow { box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08); }
+  </style>
+</head>
+<body class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-300">
+
+<script>
+const STORAGE_STAFF_KEY = 'staffList';
+const STORAGE_CURRENT_USER = 'currentUser';
+const STORAGE_SUPPLIER_KEY = 'supplierList';
+const STORAGE_THRESHOLD_KEY = 'stokThreshold';
+const STORAGE_GUDANG_KEY = 'gudangData'; 
+
+let staffList = JSON.parse(localStorage.getItem(STORAGE_STAFF_KEY) || '[]');
+let supplierList = JSON.parse(localStorage.getItem(STORAGE_SUPPLIER_KEY) || '[]');
+
+if (staffList.length === 0) {
+    staffList = [
+        { nama: 'Faisal', username: 'faisal', role: 'Kepala Gudang', status: 'Offline', lastLogin: '-' },
+        { nama: 'Hisyam', username: 'hisyam', role: 'Staf Packing', status: 'Offline', lastLogin: '-' },
+        { nama: 'Darmi Anto', username: 'darmi', role: 'Staf Packing', status: 'Offline', lastLogin: '-' },
+        { nama: 'Catur Gustama', username: 'catur', role: 'Staf Packing', status: 'Offline', lastLogin: '-' },
+    ];
+    localStorage.setItem(STORAGE_STAFF_KEY, JSON.stringify(staffList));
+}
+
+function getThreshold() { return localStorage.getItem(STORAGE_THRESHOLD_KEY) || 5; }
+
+function setThreshold() {
+    const val = document.getElementById('adminThreshInput').value;
+    localStorage.setItem(STORAGE_THRESHOLD_KEY, val);
+    document.getElementById('displayThresh').textContent = val;
+    alert('Threshold berhasil diperbarui!');
+}
+
+function resetSemuaData() {
+    if (confirm('Tindakan ini akan menghapus semua data gudang, history, dan undo/redo. Lanjutkan?')) {
+        localStorage.setItem(STORAGE_GUDANG_KEY, JSON.stringify([]));
+        localStorage.removeItem('historyLog');
+        localStorage.removeItem('gudang_undo_stack_v2');
+        localStorage.removeItem('gudang_redo_stack_v2');
+        alert('Data Global Berhasil Direset!');
+        location.reload();
+    }
+}
+
+function toggleDarkMode() {
+    document.documentElement.classList.toggle('dark');
+    localStorage.setItem('theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    if (localStorage.getItem('theme') === 'dark') document.documentElement.classList.add('dark');
+    document.getElementById('displayThresh').textContent = getThreshold();
+    document.getElementById('adminThreshInput').value = getThreshold();
+    renderStaff();
+    renderSupplier();
+});
+</script>
+
+  <header class="bg-[#1a9e53] text-white py-4 px-8 flex justify-between items-center shadow-md">
+    <div class="flex items-center gap-3">
+        <span class="text-2xl">🏢</span>
+        <h1 class="text-xl font-bold tracking-wide">Admin Gudang</h1>
+    </div>
+    <div class="flex items-center gap-4">
+        <a href="Dashboard.html" class="bg-white text-blue-800 px-4 py-2 rounded-md font-semibold text-sm flex items-center gap-2 hover:bg-gray-100 transition shadow-sm">
+            <span class="bg-blue-800 text-white rounded px-1 text-[10px]">⬅</span> Kembali ke Dashboard
+        </a>
+        <button onclick="toggleDarkMode()" class="flex items-center gap-2 text-sm font-medium hover:text-yellow-300 transition">
+            <span>🌙</span> Dark Mode
+        </button>
+    </div>
+  </header>
+
+  <main class="p-8 max-w-6xl mx-auto space-y-10">
+
+    <section class="bg-white dark:bg-gray-800 rounded-3xl p-8 card-shadow border border-gray-100 dark:border-gray-700">
+        <div class="flex items-center gap-2 mb-6">
+            <span class="text-xl">⚙️</span>
+            <h2 class="text-2xl font-bold text-red-600">Pengaturan Sistem Kritis</h2>
+        </div>
+
+        <div class="border border-gray-200 dark:border-gray-600 rounded-xl p-6 mb-6">
+            <h3 class="font-bold text-lg mb-1">Threshold Stok Kritis</h3>
+            <p class="text-red-500 text-sm mb-4">Atur batas minimal stok (unit) di bawah yang akan ditandai sebagai "Hampir Habis" di Dashboard.</p>
+            <div class="flex items-center gap-4">
+                <input id="adminThreshInput" type="number" class="w-20 px-3 py-2 border rounded-md dark:bg-gray-700 text-center focus:ring-2 focus:ring-blue-500 outline-none">
+                <button onclick="setThreshold()" class="bg-[#3b49df] text-white px-6 py-2 rounded-md font-semibold hover:bg-blue-700 transition">Terapkan Threshold</button>
+                <span class="text-sm text-gray-600 dark:text-gray-400 font-medium">Saat Ini: <span id="displayThresh">5</span></span>
+            </div>
+        </div>
+
+        <div class="border border-red-200 bg-red-50/30 dark:bg-red-900/10 rounded-xl p-6 border-l-[6px] border-l-red-600">
+            <div class="flex items-center gap-2 mb-2 text-red-600">
+                <span>⚠️</span>
+                <h3 class="font-bold text-lg">Reset Data Global</h3>
+            </div>
+            <p class="text-gray-700 dark:text-gray-300 text-sm mb-4 font-medium">Tindakan ini akan <span class="font-bold">**menghapus semua data gudang, history, dan undo/redo**</span>. Gunakan dengan sangat hati-hati.</p>
+            <button onclick="resetSemuaData()" class="bg-[#d93025] text-white px-8 py-2.5 rounded-lg font-bold shadow-lg hover:bg-red-700 transition active:scale-95">
+                Lakukan Reset Data Total
+            </button>
+        </div>
+    </section>
+
+    <section class="bg-white dark:bg-gray-800 rounded-3xl p-8 card-shadow border border-gray-100 dark:border-gray-700">
+        <div class="flex justify-between items-center mb-6">
+            <div class="flex items-center gap-2">
+                <span class="text-2xl">👷</span>
+                <h2 class="text-2xl font-bold text-green-600">Personil (Login Tanpa Password)</h2>
+            </div>
+            <button onclick="openStaffModal()" class="bg-[#1a73e8] text-white px-5 py-2 rounded-lg font-bold shadow hover:bg-blue-600 transition">Tambah Staf</button>
+        </div>
+        
+        <div class="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700">
+            <table class="w-full text-sm text-left border-collapse">
+                <thead class="bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 uppercase text-xs font-bold">
+                    <tr>
+                        <th class="px-6 py-4">Nama</th>
+                        <th class="px-6 py-4">Role</th>
+                        <th class="px-6 py-4 text-center">Status</th>
+                        <th class="px-6 py-4">Terakhir Login (Auto Log)</th>
+                        <th class="px-6 py-4 text-center">Aksi</th>
+                    </tr>
+                </thead>
+                <tbody id="staffTable"></tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="bg-white dark:bg-gray-800 rounded-3xl p-8 card-shadow border border-gray-100 dark:border-gray-700">
+        <div class="flex justify-between items-center mb-6">
+            <div class="flex items-center gap-2">
+                <span class="text-2xl">🚚</span>
+                <h2 class="text-2xl font-bold text-orange-600">Daftar Supplier</h2>
+            </div>
+            <button onclick="openSupplierModal()" class="bg-[#0f9d58] text-white px-5 py-2 rounded-lg font-bold shadow hover:bg-green-600 transition">Tambah Supplier</button>
+        </div>
+        
+        <div class="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700">
+            <table class="w-full text-sm text-left border-collapse">
+                <thead class="bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 uppercase text-xs font-bold">
+                    <tr>
+                        <th class="px-6 py-4 w-1/2">Nama</th>
+                        <th class="px-6 py-4 w-1/4">Kontak</th>
+                        <th class="px-6 py-4 text-center">Aksi</th>
+                    </tr>
+                </thead>
+                <tbody id="supplierTable"></tbody>
+            </table>
+        </div>
+    </section>
+
+  </main>
+
+  <div id="staffModal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+    <div class="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-2xl w-[400px]">
+        <h3 class="text-2xl font-bold mb-6 text-blue-600" id="staffModalTitle">Tambah Personil</h3>
+        <form id="staffForm" class="space-y-4">
+            <input type="hidden" id="editStaffIndex">
+            <div>
+                <label class="block text-xs font-bold mb-1 uppercase text-gray-500">Nama Lengkap</label>
+                <input type="text" id="staffNama" class="w-full p-3 border rounded-lg dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-400" required>
+            </div>
+            <div>
+                <label class="block text-xs font-bold mb-1 uppercase text-gray-500">Username</label>
+                <input type="text" id="staffUsername" class="w-full p-3 border rounded-lg dark:bg-gray-700 outline-none focus:ring-2 focus:ring-blue-400" required>
+            </div>
+            <div>
+                <label class="block text-xs font-bold mb-1 uppercase text-gray-500">Jabatan / Role</label>
+                <select id="staffRole" class="w-full p-3 border rounded-lg dark:bg-gray-700 outline-none">
+                    <option>Admin</option>
+                    <option>Staf Packing</option>
+                    <option>Kepala Gudang</option>
+                    <option>Checker</option>
+                </select>
+            </div>
+            <div class="flex gap-3 mt-6">
+                <button type="submit" class="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold">Simpan</button>
+                <button type="button" onclick="closeStaffModal()" class="flex-1 bg-gray-200 dark:bg-gray-600 py-3 rounded-lg font-bold text-gray-700 dark:text-gray-200">Batal</button>
+            </div>
+        </form>
+    </div>
+  </div>
+
+<div id="supplierModal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+    <div class="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-2xl w-[400px]">
+        <h3 class="text-2xl font-bold mb-6 text-green-600" id="supplierModalTitle">Tambah Supplier</h3>
+        <form id="supplierForm" class="space-y-4">
+            <input type="hidden" id="editSupplierIndex">
+            <div>
+                <label class="block text-xs font-bold mb-1 uppercase text-gray-500">Nama Supplier</label>
+                <input type="text" id="supplierNama" class="w-full p-3 border rounded-lg dark:bg-gray-700 outline-none focus:ring-2 focus:ring-green-400" required>
+            </div>
+            <div>
+                <label class="block text-xs font-bold mb-1 uppercase text-gray-500">Nomor Kontak</label>
+                <input type="text" id="supplierKontak" class="w-full p-3 border rounded-lg dark:bg-gray-700 outline-none focus:ring-2 focus:ring-green-400" required>
+            </div>
+            <div class="flex gap-3 mt-6">
+                <button type="submit" class="flex-1 bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 transition">Simpan</button>
+                <button type="button" onclick="closeSupplierModal()" class="flex-1 bg-gray-200 dark:bg-gray-600 py-3 rounded-lg font-bold text-gray-700 dark:text-gray-200">Batal</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+  <script>
+    function renderStaff() {
+        const tbody = document.getElementById('staffTable');
+        const activeUser = localStorage.getItem(STORAGE_CURRENT_USER);
+        tbody.innerHTML = '';
+        
+        staffList.forEach((s, i) => {
+            const isOnline = s.status === 'Online';
+            const isActive = s.nama === activeUser;
+
+            tbody.innerHTML += `
+                <tr class="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition ${isActive ? 'bg-green-50/50 dark:bg-green-900/10' : ''}">
+                    <td class="px-6 py-4 font-bold">
+                        ${s.nama}
+                        ${isActive ? '<span class="ml-3 text-[10px] bg-green-200 text-green-800 px-2 py-0.5 rounded-full font-bold">Sesi Aktif</span>' : ''}
+                    </td>
+                    <td class="px-6 py-4 text-gray-600 dark:text-gray-400 font-medium">${s.role}</td>
+                    <td class="px-6 py-4 text-center">
+                        <span class="${isOnline ? 'text-green-500' : 'text-gray-400'} font-bold">
+                            ● <span class="ml-1">${s.status}</span>
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 font-mono text-gray-500 text-xs">${s.lastLogin || '-'}</td>
+                    <td class="px-6 py-4 text-center space-x-2">
+                        <button onclick="openStaffModal(${i})" class="bg-[#f59e0b] hover:bg-yellow-500 text-white px-3 py-1.5 rounded-md text-xs font-bold transition">Edit</button>
+                        <button onclick="deleteStaff(${i})" class="bg-[#ef4444] hover:bg-red-600 text-white px-3 py-1.5 rounded-md text-xs font-bold transition">Hapus</button>
+                    </td>
+                </tr>`;
+        });
+    }
+
+    function renderSupplier() {
+        const tbody = document.getElementById('supplierTable');
+        tbody.innerHTML = '';
+        supplierList.forEach((s, i) => {
+            tbody.innerHTML += `
+                <tr class="border-b dark:border-gray-700 hover:bg-gray-50 transition">
+                    <td class="px-6 py-5 font-bold text-gray-700 dark:text-gray-200">${s.nama}</td>
+                    <td class="px-6 py-5 font-medium text-gray-600 dark:text-gray-400">${s.kontak}</td>
+                    <td class="px-6 py-5 text-center">
+                        <button onclick="deleteSupplier(${i})" class="text-red-500 font-bold hover:underline">Hapus</button>
+                    </td>
+                </tr>`;
+        });
+    }
+
+    function openStaffModal(i = null) {
+        document.getElementById('staffModal').classList.remove('hidden');
+        if (i !== null) {
+            document.getElementById('staffModalTitle').textContent = 'Edit Staf';
+            document.getElementById('editStaffIndex').value = i;
+            document.getElementById('staffNama').value = staffList[i].nama;
+            document.getElementById('staffUsername').value = staffList[i].username;
+            document.getElementById('staffRole').value = staffList[i].role;
+        } else {
+            document.getElementById('staffModalTitle').textContent = 'Tambah Staf';
+            document.getElementById('editStaffIndex').value = '';
+            document.getElementById('staffForm').reset();
+        }
+    }
+
+    function closeStaffModal() { document.getElementById('staffModal').classList.add('hidden'); }
+
+    document.getElementById('staffForm').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const idx = document.getElementById('editStaffIndex').value;
+        const data = {
+            nama: document.getElementById('staffNama').value,
+            username: document.getElementById('staffUsername').value,
+            role: document.getElementById('staffRole').value,
+            status: 'Offline',
+            lastLogin: '-'
+        };
+        if (idx === '') staffList.push(data);
+        else staffList[idx] = { ...staffList[idx], ...data };
+        
+        localStorage.setItem(STORAGE_STAFF_KEY, JSON.stringify(staffList));
+        renderStaff();
+        closeStaffModal();
+    });
+
+    function deleteStaff(i) { if(confirm('Hapus staf ini?')) { staffList.splice(i,1); localStorage.setItem(STORAGE_STAFF_KEY, JSON.stringify(staffList)); renderStaff(); } }
+    function deleteSupplier(i) { if(confirm('Hapus supplier ini?')) { supplierList.splice(i,1); localStorage.setItem(STORAGE_SUPPLIER_KEY, JSON.stringify(supplierList)); renderSupplier(); } }
+    function openSupplierModal(i = null) {
+    document.getElementById('supplierModal').classList.remove('hidden');
+    const title = document.getElementById('supplierModalTitle');
+    const indexInput = document.getElementById('editSupplierIndex');
+    const form = document.getElementById('supplierForm');
+
+    if (i !== null) {
+        title.textContent = 'Edit Supplier';
+        indexInput.value = i;
+        document.getElementById('supplierNama').value = supplierList[i].nama;
+        document.getElementById('supplierKontak').value = supplierList[i].kontak;
+    } else {
+        title.textContent = 'Tambah Supplier';
+        indexInput.value = '';
+        form.reset();
+    }
+}
+
+function closeSupplierModal() {
+    document.getElementById('supplierModal').classList.add('hidden');
+}
+
+document.getElementById('supplierForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const idx = document.getElementById('editSupplierIndex').value;
+    const data = {
+        nama: document.getElementById('supplierNama').value,
+        kontak: document.getElementById('supplierKontak').value
+    };
+
+    if (idx === '') {
+        supplierList.push(data);
+    } else {
+        supplierList[idx] = data;
+    }
+    
+    localStorage.setItem(STORAGE_SUPPLIER_KEY, JSON.stringify(supplierList));
+    renderSupplier();
+    closeSupplierModal();
+});
+
+function renderSupplier() {
+    const tbody = document.getElementById('supplierTable');
+    tbody.innerHTML = '';
+    supplierList.forEach((s, i) => {
+        tbody.innerHTML += `
+            <tr class="border-b dark:border-gray-700 hover:bg-gray-50 transition">
+                <td class="px-6 py-5 font-bold text-gray-700 dark:text-gray-200">${s.nama}</td>
+                <td class="px-6 py-5 font-medium text-gray-600 dark:text-gray-400">${s.kontak}</td>
+                <td class="px-6 py-5 text-center space-x-3">
+                    <button onclick="openSupplierModal(${i})" class="text-yellow-500 font-bold hover:underline">Edit</button>
+                    <button onclick="deleteSupplier(${i})" class="text-red-500 font-bold hover:underline">Hapus</button>
+                </td>
+            </tr>`;
+    });
+}
+  </script>
+</body>
+</html>
